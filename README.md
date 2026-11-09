@@ -81,3 +81,18 @@ py -B login.py
 ```
 
 El instalador prepara las tablas de encuestas y agrega los campos de lote y caducidad a Medicamentos.
+
+## Cómo colaborar
+
+Usamos **trunk-based development**. La rama `main` concentra la versión integrada de la farmacia. Cada tarea se prepara en una rama de corta duración y se integra mediante un *pull request* (PR).
+
+1. Actualiza tu copia con `git switch main` y `git pull --ff-only`.
+2. Crea una rama para un cambio concreto, por ejemplo `git switch -c fix/consulta-empleados`.
+3. Guarda el cambio en commits pequeños y publica la rama con `git push -u origin HEAD`.
+4. Abre un PR hacia `main`, explica qué cambió y revisa los resultados de CI. Si falla alguna comprobación, corrige el problema en la misma rama. Integra el PR cuando las comprobaciones pasen y elimina la rama de la tarea.
+
+### Convención de commits
+
+Escribe el asunto como `tipo(ámbito): resumen`. El ámbito es opcional e identifica el módulo afectado. Usa un resumen breve en español que describa el cambio. Algunos ejemplos son `fix(empleados): corrige la consulta por nombre`, `test(ventas): comprueba dos ventas simultáneas` y `ci: valida el proyecto con MariaDB`.
+
+Usa `feat` para una función, `fix` para una corrección, `test` para pruebas, `docs` para documentación y `ci` para integración continua. También se aceptan `build`, `chore`, `perf`, `refactor`, `revert` y `style`. Puedes añadir `!` antes de los dos puntos para indicar un cambio incompatible. La verificación se aplica a los asuntos de commits nuevos de la tarea y omite los commits de fusión.
