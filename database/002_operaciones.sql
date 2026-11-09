@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS encuestas (
+ idEncuesta INT AUTO_INCREMENT PRIMARY KEY, idVenta INT NULL,
+ calificacion INT NOT NULL CHECK(calificacion BETWEEN 1 AND 5), comentario TEXT,
+ fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY (idVenta) REFERENCES ventas(idVenta) ON DELETE SET NULL
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS encuesta_autor (
+ idEncuesta INT PRIMARY KEY, idUsuario INT NOT NULL,
+ FOREIGN KEY(idEncuesta) REFERENCES encuestas(idEncuesta) ON DELETE CASCADE,
+ FOREIGN KEY(idUsuario) REFERENCES usuarios(idUsuario)
+) ENGINE=InnoDB;

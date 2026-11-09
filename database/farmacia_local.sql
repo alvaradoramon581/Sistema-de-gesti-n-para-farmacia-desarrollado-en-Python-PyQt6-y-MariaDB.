@@ -185,6 +185,8 @@ CREATE TABLE medicamentos (
     cantidad INT NOT NULL DEFAULT 0,
 
     codigoBarras VARCHAR(100) NULL,
+    lote VARCHAR(60) NULL,
+    fechaCaducidad DATE NULL,
 
     descripcion TEXT NULL,
 

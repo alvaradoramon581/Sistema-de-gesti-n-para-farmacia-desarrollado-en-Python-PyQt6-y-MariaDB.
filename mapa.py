@@ -8,9 +8,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QFrame,
-    QTableWidget,
     QTableWidgetItem,
-    QHeaderView,
     QGraphicsView,
     QGraphicsScene,
     QGraphicsRectItem,
@@ -30,10 +28,13 @@ from PyQt6.QtGui import (
     QBrush,
     QPen,
     QFont,
+    QPainter,
     QPolygonF
 )
 
 from conexion import conectar
+from ui_comun import tabla, encabezado, tarjeta
+from estilos import ESTILO_GENERAL, ESTILO_VALOR, ESTILO_TEXTO_SECUNDARIO, ESTILO_BOTON_SECUNDARIO
 
 
 class MapaMedicamentos(QWidget):
@@ -98,19 +99,18 @@ class MapaMedicamentos(QWidget):
 
     def crear_interfaz(self):
 
+        self.setObjectName("superficie")
+        self.setStyleSheet(ESTILO_GENERAL)
         layout_principal = QVBoxLayout(
             self
         )
 
         layout_principal.setContentsMargins(
-            30,
-            25,
-            30,
-            25
+            24, 22, 24, 20
         )
 
         layout_principal.setSpacing(
-            15
+            12
         )
 
         # =====================================================
@@ -121,29 +121,12 @@ class MapaMedicamentos(QWidget):
             "Localizar medicamento"
         )
 
-        titulo.setStyleSheet("""
-            QLabel {
-                color: #1565C0;
-                background-color: transparent;
-
-                font-size: 28px;
-                font-weight: bold;
-            }
-        """)
 
         descripcion = QLabel(
             "Busque un medicamento para visualizar "
             "el estante y nivel donde se encuentra."
         )
 
-        descripcion.setStyleSheet("""
-            QLabel {
-                color: #607D8B;
-                background-color: transparent;
-
-                font-size: 14px;
-            }
-        """)
 
         # =====================================================
         # BUSCADOR
@@ -224,21 +207,14 @@ class MapaMedicamentos(QWidget):
         )
 
         panel_izquierdo.setMinimumWidth(
-            330
+            272
         )
 
         panel_izquierdo.setMaximumWidth(
-            420
+            355
         )
 
-        panel_izquierdo.setStyleSheet("""
-            QFrame#panelInformacion {
-                background-color: #FFFFFF;
 
-                border: 1px solid #D6E4F0;
-                border-radius: 10px;
-            }
-        """)
 
         layout_izquierdo = QVBoxLayout(
             panel_izquierdo
@@ -252,7 +228,7 @@ class MapaMedicamentos(QWidget):
         )
 
         layout_izquierdo.setSpacing(
-            10
+            6
         )
 
         # =====================================================
@@ -263,47 +239,13 @@ class MapaMedicamentos(QWidget):
             "Resultados"
         )
 
-        lbl_resultados.setStyleSheet("""
-            QLabel {
-                color: #37474F;
-                background-color: transparent;
+        lbl_resultados.setObjectName("seccion")
 
-                font-size: 16px;
-                font-weight: bold;
-            }
-        """)
-
-        self.tabla_resultados = QTableWidget()
-
-        self.tabla_resultados.setColumnCount(
-            3
-        )
-
-        self.tabla_resultados.setHorizontalHeaderLabels([
+        self.tabla_resultados = tabla([
             "Medicamento",
             "Existencia",
             "Ubicación"
         ])
-
-        self.tabla_resultados.setSelectionBehavior(
-            QTableWidget.SelectionBehavior.SelectRows
-        )
-
-        self.tabla_resultados.setSelectionMode(
-            QTableWidget.SelectionMode.SingleSelection
-        )
-
-        self.tabla_resultados.setEditTriggers(
-            QTableWidget.EditTrigger.NoEditTriggers
-        )
-
-        self.tabla_resultados.verticalHeader().setVisible(
-            False
-        )
-
-        self.tabla_resultados.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
 
         self.tabla_resultados.cellClicked.connect(
             self.seleccionar_resultado
@@ -317,17 +259,7 @@ class MapaMedicamentos(QWidget):
             "Información"
         )
 
-        lbl_detalles.setStyleSheet("""
-            QLabel {
-                color: #37474F;
-                background-color: transparent;
-
-                font-size: 16px;
-                font-weight: bold;
-
-                margin-top: 5px;
-            }
-        """)
+        lbl_detalles.setObjectName("seccion")
 
         self.lbl_nombre = QLabel(
             "Seleccione un medicamento"
@@ -337,15 +269,7 @@ class MapaMedicamentos(QWidget):
             True
         )
 
-        self.lbl_nombre.setStyleSheet("""
-            QLabel {
-                color: #1565C0;
-                background-color: transparent;
-
-                font-size: 18px;
-                font-weight: bold;
-            }
-        """)
+        self.lbl_nombre.setStyleSheet(ESTILO_VALOR)
 
         self.lbl_presentacion = QLabel(
             "Presentación: -"
@@ -386,14 +310,7 @@ class MapaMedicamentos(QWidget):
                 True
             )
 
-            label.setStyleSheet("""
-                QLabel {
-                    color: #455A64;
-                    background-color: transparent;
-
-                    font-size: 13px;
-                }
-            """)
+            label.setStyleSheet(ESTILO_TEXTO_SECUNDARIO)
 
         # =====================================================
         # ESTADO
@@ -407,18 +324,7 @@ class MapaMedicamentos(QWidget):
             True
         )
 
-        self.lbl_estado.setStyleSheet("""
-            QLabel {
-                background-color: #E3F2FD;
-                color: #1565C0;
-
-                border-radius: 6px;
-
-                padding: 10px;
-
-                font-weight: bold;
-            }
-        """)
+        self.lbl_estado.setObjectName("resumen")
 
         # =====================================================
         # AGREGAR PANEL IZQUIERDO
@@ -479,14 +385,7 @@ class MapaMedicamentos(QWidget):
             "panelMapa"
         )
 
-        panel_mapa.setStyleSheet("""
-            QFrame#panelMapa {
-                background-color: #FFFFFF;
 
-                border: 1px solid #D6E4F0;
-                border-radius: 10px;
-            }
-        """)
 
         layout_mapa = QVBoxLayout(
             panel_mapa
@@ -504,36 +403,22 @@ class MapaMedicamentos(QWidget):
         )
 
         titulo_mapa.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
+            Qt.AlignmentFlag.AlignLeft
         )
 
-        titulo_mapa.setStyleSheet("""
-            QLabel {
-                color: #37474F;
-                background-color: transparent;
-
-                font-size: 18px;
-                font-weight: bold;
-            }
-        """)
+        titulo_mapa.setObjectName("seccion")
 
         leyenda = QLabel(
             "Estantes de 4 niveles  |  "
             "Nivel localizado en verde"
         )
 
+        leyenda.setWordWrap(True)
         leyenda.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
+            Qt.AlignmentFlag.AlignLeft
         )
 
-        leyenda.setStyleSheet("""
-            QLabel {
-                color: #607D8B;
-                background-color: transparent;
-
-                font-size: 12px;
-            }
-        """)
+        leyenda.setStyleSheet(ESTILO_TEXTO_SECUNDARIO)
 
         # =====================================================
         # ESCENA
@@ -545,14 +430,7 @@ class MapaMedicamentos(QWidget):
             self.scene
         )
 
-        self.vista.setStyleSheet("""
-            QGraphicsView {
-                background-color: #FAFCFE;
-
-                border: 1px solid #CFD8DC;
-                border-radius: 6px;
-            }
-        """)
+        self.vista.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         self.vista.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAsNeeded
@@ -592,17 +470,10 @@ class MapaMedicamentos(QWidget):
         # PRINCIPAL
         # =====================================================
 
-        layout_principal.addWidget(
-            titulo
-        )
+        layout_principal.addLayout(encabezado(titulo, descripcion, "Buscar medicamento"))
 
-        layout_principal.addWidget(
-            descripcion
-        )
-
-        layout_principal.addLayout(
-            layout_busqueda
-        )
+        self.btn_limpiar.setStyleSheet(ESTILO_BOTON_SECUNDARIO)
+        layout_principal.addWidget(tarjeta(layout_busqueda))
 
         layout_principal.addLayout(
             layout_cuerpo,
@@ -647,23 +518,23 @@ class MapaMedicamentos(QWidget):
         # =====================================================
 
         color_frente = QColor(
-            "#ECEFF1"
+            "#E2EEFC"
         )
 
         color_lateral = QColor(
-            "#B0BEC5"
+            "#AEC7E3"
         )
 
         color_sombra = QColor(
-            "#90A4AE"
+            "#83A6CE"
         )
 
         color_repisas = QColor(
-            "#CFD8DC"
+            "#C5DCF4"
         )
 
         color_borde = QColor(
-            "#78909C"
+            "#6386AC"
         )
 
         estructura = []
@@ -683,13 +554,13 @@ class MapaMedicamentos(QWidget):
 
         fondo.setBrush(
             QBrush(
-                QColor("#FAFAFA")
+                QColor("#F2F7FF")
             )
         )
 
         fondo.setPen(
             QPen(
-                QColor("#CFD8DC"),
+                QColor("#C5DCF4"),
                 1
             )
         )
@@ -990,7 +861,7 @@ class MapaMedicamentos(QWidget):
         )
 
         texto.setDefaultTextColor(
-            QColor("#263238")
+            QColor("#0B305A")
         )
 
         fuente = QFont()
@@ -1092,7 +963,7 @@ class MapaMedicamentos(QWidget):
             )
 
             texto_entrada.setDefaultTextColor(
-                QColor("#1565C0")
+                QColor("#0064C9")
             )
 
             fuente = QFont()
@@ -1658,11 +1529,11 @@ class MapaMedicamentos(QWidget):
     def restaurar_estantes(self):
 
         color_normal = QColor(
-            "#CFD8DC"
+            "#C5DCF4"
         )
 
         borde_normal = QColor(
-            "#78909C"
+            "#6386AC"
         )
 
         for estante in self.estantes.values():

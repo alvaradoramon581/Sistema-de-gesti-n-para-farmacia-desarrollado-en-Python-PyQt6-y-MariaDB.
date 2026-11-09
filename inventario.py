@@ -7,11 +7,9 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QHBoxLayout,
-    QFormLayout,
+    QGridLayout,
     QMessageBox,
-    QTableWidget,
     QTableWidgetItem,
-    QHeaderView,
     QComboBox,
     QSpinBox,
     QTextEdit,
@@ -21,6 +19,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from conexion import conectar
+from ui_comun import tabla, encabezado, tarjeta
+from estilos import ESTILO_GENERAL, ESTILO_TEXTO_SECUNDARIO, ESTILO_VALOR, ESTILO_BOTON_SECUNDARIO
 
 
 class Inventario(QWidget):
@@ -43,14 +43,16 @@ class Inventario(QWidget):
 
     def crear_interfaz(self):
 
+        self.setObjectName("superficie")
+        self.setStyleSheet(ESTILO_GENERAL)
         layout_principal = QVBoxLayout(self)
 
         layout_principal.setContentsMargins(
-            30, 25, 30, 25
+            24, 22, 24, 20
         )
 
         layout_principal.setSpacing(
-            15
+            12
         )
 
 
@@ -62,27 +64,12 @@ class Inventario(QWidget):
             "Inventario"
         )
 
-        titulo.setStyleSheet("""
-            QLabel {
-                color: #1565C0;
-                font-size: 28px;
-                font-weight: bold;
-                background-color: transparent;
-            }
-        """)
 
 
         descripcion = QLabel(
             "Control de existencias, entradas, ajustes y devoluciones."
         )
 
-        descripcion.setStyleSheet("""
-            QLabel {
-                color: #607D8B;
-                font-size: 14px;
-                background-color: transparent;
-            }
-        """)
 
 
         # =====================================================
@@ -93,13 +80,7 @@ class Inventario(QWidget):
             f"Usuario: {self.usuario['nombre']}"
         )
 
-        lbl_usuario.setStyleSheet("""
-            QLabel {
-                color: #546E7A;
-                font-size: 13px;
-                background-color: transparent;
-            }
-        """)
+        lbl_usuario.setStyleSheet(ESTILO_TEXTO_SECUNDARIO)
 
 
         # =====================================================
@@ -153,32 +134,19 @@ class Inventario(QWidget):
             "frameMovimiento"
         )
 
-        frame_movimiento.setStyleSheet("""
-            QFrame#frameMovimiento {
-                background-color: #FFFFFF;
-                border: 1px solid #D6E4F0;
-                border-radius: 10px;
-            }
-
-            QLabel {
-                background-color: transparent;
-                border: none;
-                color: #37474F;
-                font-weight: bold;
-            }
-        """)
 
 
-        layout_movimiento = QFormLayout(
+
+        layout_movimiento = QGridLayout(
             frame_movimiento
         )
 
         layout_movimiento.setContentsMargins(
-            20, 20, 20, 20
+            14, 12, 14, 12
         )
 
         layout_movimiento.setSpacing(
-            12
+            7
         )
 
 
@@ -190,28 +158,14 @@ class Inventario(QWidget):
             "Ningún medicamento seleccionado"
         )
 
-        self.lbl_medicamento.setStyleSheet("""
-            QLabel {
-                color: #1565C0;
-                font-size: 15px;
-                font-weight: bold;
-                background-color: transparent;
-            }
-        """)
+        self.lbl_medicamento.setStyleSheet(ESTILO_VALOR)
 
 
         self.lbl_existencia_actual = QLabel(
             "0"
         )
 
-        self.lbl_existencia_actual.setStyleSheet("""
-            QLabel {
-                color: #263238;
-                font-size: 16px;
-                font-weight: bold;
-                background-color: transparent;
-            }
-        """)
+        self.lbl_existencia_actual.setStyleSheet(ESTILO_VALOR)
 
 
         # =====================================================
@@ -267,7 +221,7 @@ class Inventario(QWidget):
         )
 
         self.txt_descripcion.setFixedHeight(
-            70
+            48
         )
 
 
@@ -275,31 +229,23 @@ class Inventario(QWidget):
         # AGREGAR CAMPOS
         # =====================================================
 
-        layout_movimiento.addRow(
-            "Medicamento:",
-            self.lbl_medicamento
-        )
-
-        layout_movimiento.addRow(
-            "Existencia actual:",
-            self.lbl_existencia_actual
-        )
-
-        layout_movimiento.addRow(
-            "Tipo de movimiento:",
-            self.cmb_tipo
-        )
-
-        layout_movimiento.addRow(
-            "Cantidad:",
-            self.spn_cantidad
-        )
-
-        layout_movimiento.addRow(
-            "Descripción:",
-            self.txt_descripcion
-        )
-
+        rotulo = QLabel("Movimiento de inventario")
+        rotulo.setObjectName("seccion")
+        layout_movimiento.addWidget(rotulo, 0, 0, 1, 2)
+        layout_movimiento.addWidget(lbl_usuario, 0, 2, 1, 2, Qt.AlignmentFlag.AlignRight)
+        self.lbl_medicamento.setWordWrap(True)
+        layout_movimiento.addWidget(QLabel("Medicamento"), 1, 0)
+        layout_movimiento.addWidget(self.lbl_medicamento, 1, 1)
+        layout_movimiento.addWidget(QLabel("Existencia actual"), 1, 2)
+        layout_movimiento.addWidget(self.lbl_existencia_actual, 1, 3)
+        layout_movimiento.addWidget(QLabel("Tipo de movimiento"), 2, 0)
+        layout_movimiento.addWidget(self.cmb_tipo, 2, 1)
+        layout_movimiento.addWidget(QLabel("Cantidad"), 2, 2)
+        layout_movimiento.addWidget(self.spn_cantidad, 2, 3)
+        layout_movimiento.addWidget(QLabel("Descripción"), 3, 0)
+        layout_movimiento.addWidget(self.txt_descripcion, 3, 1, 1, 3)
+        layout_movimiento.setColumnStretch(1, 2)
+        layout_movimiento.setColumnStretch(3, 1)
 
         # =====================================================
         # BOTONES
@@ -343,13 +289,7 @@ class Inventario(QWidget):
         # TABLA INVENTARIO
         # =====================================================
 
-        self.tabla = QTableWidget()
-
-        self.tabla.setColumnCount(
-            8
-        )
-
-        self.tabla.setHorizontalHeaderLabels([
+        self.tabla = tabla([
             "Nombre",
             "Presentación",
             "Existencia",
@@ -361,26 +301,6 @@ class Inventario(QWidget):
         ])
 
 
-        self.tabla.setSelectionBehavior(
-            QTableWidget.SelectionBehavior.SelectRows
-        )
-
-        self.tabla.setSelectionMode(
-            QTableWidget.SelectionMode.SingleSelection
-        )
-
-        self.tabla.setEditTriggers(
-            QTableWidget.EditTrigger.NoEditTriggers
-        )
-
-        self.tabla.verticalHeader().setVisible(
-            False
-        )
-
-        self.tabla.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
-
         self.tabla.cellClicked.connect(
             self.seleccionar_medicamento
         )
@@ -390,34 +310,16 @@ class Inventario(QWidget):
         # AGREGAR TODO
         # =====================================================
 
-        layout_principal.addWidget(
-            titulo
-        )
+        layout_principal.addLayout(encabezado(titulo, descripcion, "Inventario"))
 
-        layout_principal.addWidget(
-            descripcion
-        )
-
-        layout_principal.addWidget(
-            lbl_usuario
-        )
-
-        layout_principal.addLayout(
-            layout_busqueda
-        )
-
-        layout_principal.addWidget(
-            frame_movimiento
-        )
-
-        layout_principal.addLayout(
-            layout_botones
-        )
-
-        layout_principal.addWidget(
-            self.tabla
-        )
-
+        self.btn_actualizar.setStyleSheet(ESTILO_BOTON_SECUNDARIO)
+        self.btn_limpiar.setStyleSheet(ESTILO_BOTON_SECUNDARIO)
+        layout_principal.addWidget(tarjeta(layout_busqueda))
+        self.tabla.setMinimumHeight(140)
+        layout_principal.addWidget(self.tabla, 1)
+        layout_botones.addStretch()
+        layout_movimiento.addLayout(layout_botones, 4, 1, 1, 3)
+        layout_principal.addWidget(frame_movimiento)
 
     # =========================================================
     # CARGAR INVENTARIO
@@ -761,371 +663,25 @@ class Inventario(QWidget):
     # =========================================================
 
     def registrar_movimiento(self):
-
+        from servicios import movimiento_manual
         if self.id_medicamento_seleccionado is None:
-
-            QMessageBox.warning(
-                self,
-                "Seleccione un medicamento",
-                "Seleccione un medicamento de la tabla."
-            )
-
+            QMessageBox.warning(self, "Seleccione un medicamento", "Seleccione un medicamento de la tabla.")
             return
-
-
-        tipo = self.cmb_tipo.currentData()
-
-        cantidad = self.spn_cantidad.value()
-
-        descripcion = (
-            self.txt_descripcion
-            .toPlainText()
-            .strip()
-        )
-
-
-        # =====================================================
-        # ENTRADA
-        # SUMA EXISTENCIA
-        # =====================================================
-
-        if tipo == "ENTRADA":
-
-            cantidad_nueva = (
-                self.cantidad_actual
-                + cantidad
-            )
-
-
-        # =====================================================
-        # DEVOLUCIÓN
-        # RESTA EXISTENCIA
-        # =====================================================
-
-        elif tipo == "DEVOLUCION":
-
-            if self.cantidad_actual <= 0:
-
-                QMessageBox.warning(
-                    self,
-                    "Sin existencia",
-                    "Este medicamento no tiene existencias para devolver."
-                )
-
-                return
-
-
-            if cantidad > self.cantidad_actual:
-
-                QMessageBox.warning(
-                    self,
-                    "Cantidad inválida",
-                    (
-                        "No puede devolver más unidades "
-                        "de las disponibles.\n\n"
-                        f"Existencia actual: {self.cantidad_actual}"
-                    )
-                )
-
-                return
-
-
-            cantidad_nueva = (
-                self.cantidad_actual
-                - cantidad
-            )
-
-
-        # =====================================================
-        # AJUSTE
-        # EL NÚMERO ES LA NUEVA EXISTENCIA TOTAL
-        # =====================================================
-
-        elif tipo == "AJUSTE":
-
-            cantidad_nueva = cantidad
-
-
-        else:
-
-            QMessageBox.warning(
-                self,
-                "Movimiento inválido",
-                "Seleccione un tipo de movimiento válido."
-            )
-
+        if QMessageBox.question(self, "Confirmar movimiento", "¿Registrar este movimiento de inventario?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
             return
-
-
-        # =====================================================
-        # EVITAR EXISTENCIA NEGATIVA
-        # =====================================================
-
-        if cantidad_nueva < 0:
-
-            QMessageBox.warning(
-                self,
-                "Existencia inválida",
-                "La existencia no puede quedar en números negativos."
-            )
-
-            return
-
-
-        # =====================================================
-        # AJUSTE SIN CAMBIOS
-        # =====================================================
-
-        if (
-            tipo == "AJUSTE"
-            and cantidad_nueva == self.cantidad_actual
-        ):
-
-            QMessageBox.information(
-                self,
-                "Sin cambios",
-                "La cantidad indicada es igual a la existencia actual."
-            )
-
-            return
-
-
-        # =====================================================
-        # DESCRIPCIÓN OBLIGATORIA PARA AJUSTE
-        # =====================================================
-
-        if (
-            tipo == "AJUSTE"
-            and not descripcion
-        ):
-
-            QMessageBox.warning(
-                self,
-                "Descripción requerida",
-                "Indique el motivo del ajuste de inventario."
-            )
-
-            self.txt_descripcion.setFocus()
-
-            return
-
-
-        # =====================================================
-        # DESCRIPCIÓN OBLIGATORIA PARA DEVOLUCIÓN
-        # =====================================================
-
-        if (
-            tipo == "DEVOLUCION"
-            and not descripcion
-        ):
-
-            QMessageBox.warning(
-                self,
-                "Descripción requerida",
-                (
-                    "Indique el motivo de la devolución.\n\n"
-                    "Ejemplo: Producto caducado."
-                )
-            )
-
-            self.txt_descripcion.setFocus()
-
-            return
-
-
-        # =====================================================
-        # CONFIRMACIÓN
-        # =====================================================
-
-        mensaje = (
-            f"Medicamento: {self.lbl_medicamento.text()}\n\n"
-            f"Existencia actual: {self.cantidad_actual}\n"
-            f"Nueva existencia: {cantidad_nueva}\n\n"
-            f"¿Desea registrar el movimiento?"
-        )
-
-
-        respuesta = QMessageBox.question(
-            self,
-            "Confirmar movimiento",
-            mensaje,
-            QMessageBox.StandardButton.Yes |
-            QMessageBox.StandardButton.No
-        )
-
-
-        if (
-            respuesta
-            != QMessageBox.StandardButton.Yes
-        ):
-
-            return
-
-
-        # =====================================================
-        # CONEXIÓN
-        # =====================================================
-
-        conexion = conectar()
-
-        if conexion is None:
-            return
-
-        cursor = None
-
-
         try:
+            nueva = movimiento_manual(self.usuario, self.id_medicamento_seleccionado,
+                self.cmb_tipo.currentData(), self.spn_cantidad.value(),
+                self.txt_descripcion.toPlainText().strip(), self.cantidad_actual)
+        except ValueError as exc:
+            QMessageBox.warning(self, "No se pudo registrar", str(exc))
+            return
+        QMessageBox.information(self, "Movimiento registrado", f"Nueva existencia: {nueva}.")
+        self.limpiar_seleccion()
+        self.cargar_inventario()
 
-            cursor = conexion.cursor()
-
-
-            # =================================================
-            # ACTUALIZAR MEDICAMENTO
-            # =================================================
-
-            consulta_actualizar = """
-                UPDATE medicamentos
-
-                SET cantidad = %s
-
-                WHERE idMedicamento = %s
-                AND activo = TRUE
-            """
-
-
-            cursor.execute(
-                consulta_actualizar,
-                (
-                    cantidad_nueva,
-                    self.id_medicamento_seleccionado
-                )
-            )
-
-
-            if cursor.rowcount == 0:
-
-                conexion.rollback()
-
-                QMessageBox.warning(
-                    self,
-                    "No actualizado",
-                    "No se pudo actualizar el medicamento."
-                )
-
-                return
-
-
-            # =================================================
-            # CANTIDAD DEL MOVIMIENTO
-            # =================================================
-
-            if tipo == "AJUSTE":
-
-                cantidad_movimiento = abs(
-                    cantidad_nueva
-                    - self.cantidad_actual
-                )
-
-            else:
-
-                cantidad_movimiento = cantidad
-
-
-            # =================================================
-            # REGISTRAR MOVIMIENTO
-            # =================================================
-
-            consulta_movimiento = """
-                INSERT INTO movimientos_inventario
-                (
-                    idMedicamento,
-                    idUsuario,
-                    idVenta,
-                    tipo,
-                    cantidad,
-                    cantidadAnterior,
-                    cantidadNueva,
-                    descripcion
-                )
-
-                VALUES
-                (
-                    %s,
-                    %s,
-                    NULL,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s
-                )
-            """
-
-
-            cursor.execute(
-                consulta_movimiento,
-                (
-                    self.id_medicamento_seleccionado,
-                    self.usuario["idUsuario"],
-                    tipo,
-                    cantidad_movimiento,
-                    self.cantidad_actual,
-                    cantidad_nueva,
-                    descripcion if descripcion else None
-                )
-            )
-
-
-            # =================================================
-            # CONFIRMAR TODO
-            # =================================================
-
-            conexion.commit()
-
-
-            QMessageBox.information(
-                self,
-                "Movimiento registrado",
-                (
-                    "El movimiento se registró correctamente.\n\n"
-                    f"Existencia anterior: {self.cantidad_actual}\n"
-                    f"Existencia nueva: {cantidad_nueva}"
-                )
-            )
-
-
-            self.limpiar_seleccion()
-
-            self.cargar_inventario()
-
-
-        except Exception as e:
-
-            conexion.rollback()
-
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"No se pudo registrar el movimiento:\n{e}"
-            )
-
-
-        finally:
-
-            if cursor is not None:
-                cursor.close()
-
-            if (
-                conexion is not None
-                and conexion.is_connected()
-            ):
-
-                conexion.close()
-
-
-    # =========================================================
-    # LIMPIAR
-    # =========================================================
 
     def limpiar_seleccion(self):
 

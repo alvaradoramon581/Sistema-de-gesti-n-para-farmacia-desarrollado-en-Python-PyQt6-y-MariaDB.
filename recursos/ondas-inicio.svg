@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1420 338" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="base" x1="80" y1="50" x2="1370" y2="310" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#073A77"/><stop offset="0.50" stop-color="#0856A3"/><stop offset="1" stop-color="#1689ED"/>
+    </linearGradient>
+    <linearGradient id="ola" x1="560" y1="350" x2="1360" y2="75" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#177BD0"/><stop offset="0.60" stop-color="#4CAAF0"/><stop offset="1" stop-color="#298BDE"/>
+    </linearGradient>
+    <linearGradient id="inferior" x1="820" y1="330" x2="1410" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#379DE9"/><stop offset="1" stop-color="#127CDB"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#base)" d="M0 0h1420v338H0z"/>
+  <path fill="#186bab" opacity=".48" d="M0 0h375C306 64 260 116 160 114 94 112 64 151 0 186z"/>
+  <path fill="#073574" opacity=".18" d="M0 338c184-164 265-88 430-92C645 241 665 97 833 0H381C277 125 263 139 139 140 81 140 41 185 0 217z"/>
+  <path fill="url(#ola)" opacity=".81" d="M549 338c80-104 165-115 267-102 137 18 176-32 242-144 26-44 57-76 91-92h271v338z"/>
+  <path fill="url(#inferior)" d="M803 338c67-56 159-28 225-117C1114 106 1090 43 1184 0h236v338z"/>
+  <g fill="none" stroke="#80c4ff" stroke-linejoin="round" opacity=".18">
+    <path stroke-width="8" d="M868 37h36q10 0 10 10v47h46q9 0 9 9v36q0 9-9 9h-46v46q0 10-10 10h-36q-9 0-9-10v-46h-46q-9 0-9-9v-36q0-9 9-9h46V47q0-10 9-10z"/>
+    <path stroke-width="5" opacity=".65" d="M1288 16v36m-18-18h36"/>
+  </g>
+</svg>

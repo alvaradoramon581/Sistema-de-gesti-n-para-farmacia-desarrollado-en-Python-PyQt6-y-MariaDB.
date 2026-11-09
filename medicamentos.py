@@ -9,19 +9,23 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QFormLayout,
     QMessageBox,
-    QTableWidget,
     QTableWidgetItem,
-    QHeaderView,
     QComboBox,
     QTextEdit,
     QSpinBox,
     QDoubleSpinBox,
-    QFrame
+    QFrame,
+    QDialog,
+    QScrollArea,
+    QDateEdit,
+    QCheckBox
 )
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QDate
 
 from conexion import conectar
+from ui_comun import tabla, encabezado, tarjeta, dimensionar_dialogo
+from estilos import ESTILO_GENERAL, ESTILO_LABEL, ESTILO_BOTON_SECUNDARIO, ESTILO_BOTON_PELIGRO
 
 
 class Medicamentos(QWidget):
@@ -43,14 +47,16 @@ class Medicamentos(QWidget):
 
     def crear_interfaz(self):
 
+        self.setObjectName("superficie")
+        self.setStyleSheet(ESTILO_GENERAL)
         layout_principal = QVBoxLayout(self)
 
         layout_principal.setContentsMargins(
-            30, 25, 30, 25
+            24, 22, 24, 20
         )
 
         layout_principal.setSpacing(
-            15
+            12
         )
 
 
@@ -60,26 +66,11 @@ class Medicamentos(QWidget):
 
         titulo = QLabel("Medicamentos")
 
-        titulo.setStyleSheet("""
-            QLabel {
-                color: #1565C0;
-                font-size: 28px;
-                font-weight: bold;
-                background-color: transparent;
-            }
-        """)
 
         descripcion = QLabel(
             "Registro y administración de medicamentos y productos."
         )
 
-        descripcion.setStyleSheet("""
-            QLabel {
-                color: #607D8B;
-                font-size: 14px;
-                background-color: transparent;
-            }
-        """)
 
 
         # =====================================================
@@ -90,13 +81,7 @@ class Medicamentos(QWidget):
 
         lbl_estado = QLabel("Estado:")
 
-        lbl_estado.setStyleSheet("""
-            QLabel {
-                color: #37474F;
-                font-weight: bold;
-                background-color: transparent;
-            }
-        """)
+        lbl_estado.setStyleSheet(ESTILO_LABEL)
 
         self.cmb_estado = QComboBox()
 
@@ -173,20 +158,7 @@ class Medicamentos(QWidget):
             "frameMedicamentos"
         )
 
-        frame_formulario.setStyleSheet("""
-            QFrame#frameMedicamentos {
-                background-color: #FFFFFF;
-                border: 1px solid #D6E4F0;
-                border-radius: 10px;
-            }
 
-            QLabel {
-                background-color: transparent;
-                border: none;
-                color: #37474F;
-                font-weight: bold;
-            }
-        """)
 
 
         layout_formulario = QFormLayout(
@@ -197,9 +169,8 @@ class Medicamentos(QWidget):
             20, 20, 20, 20
         )
 
-        layout_formulario.setSpacing(
-            12
-        )
+        layout_formulario.setSpacing(9)
+        layout_formulario.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
 
 
         # =====================================================
@@ -227,6 +198,20 @@ class Medicamentos(QWidget):
             999999
         )
 
+
+        self.txt_lote = QLineEdit()
+        self.txt_lote.setMaxLength(60)
+        self.txt_lote.setPlaceholderText("Código impreso en el envase")
+
+        self.fecha_caducidad = QDateEdit(QDate.currentDate())
+        self.fecha_caducidad.setDisplayFormat("dd/MM/yyyy")
+        self.fecha_caducidad.setCalendarPopup(True)
+        self.sin_caducidad = QCheckBox("Sin fecha registrada")
+        self.sin_caducidad.toggled.connect(self.fecha_caducidad.setDisabled)
+        self.sin_caducidad.setChecked(True)
+        fila_caducidad = QHBoxLayout()
+        fila_caducidad.addWidget(self.fecha_caducidad)
+        fila_caducidad.addWidget(self.sin_caducidad)
 
         self.txt_codigo = QLineEdit()
 
@@ -323,6 +308,9 @@ class Medicamentos(QWidget):
         # AGREGAR CAMPOS
         # =====================================================
 
+        datos = QLabel("Datos del medicamento")
+        datos.setObjectName("seccion")
+        layout_formulario.addRow(datos)
         layout_formulario.addRow(
             "Nombre:",
             self.txt_nombre
@@ -343,6 +331,9 @@ class Medicamentos(QWidget):
             self.txt_codigo
         )
 
+        layout_formulario.addRow("Lote:", self.txt_lote)
+        layout_formulario.addRow("Caducidad:", fila_caducidad)
+
         layout_formulario.addRow(
             "Principio activo:",
             self.txt_principio
@@ -358,6 +349,9 @@ class Medicamentos(QWidget):
             self.txt_contenido
         )
 
+        existencias = QLabel("Precios e inventario")
+        existencias.setObjectName("seccion")
+        layout_formulario.addRow(existencias)
         layout_formulario.addRow(
             "Precio compra:",
             self.spn_precio_compra
@@ -392,16 +386,13 @@ class Medicamentos(QWidget):
 
 
         self.btn_guardar = QPushButton(
-            "Guardar"
+            "Registrar medicamento"
         )
 
         self.btn_modificar = QPushButton(
             "Modificar"
         )
 
-        self.btn_limpiar = QPushButton(
-            "Limpiar"
-        )
 
         self.btn_desactivar = QPushButton(
             "Desactivar"
@@ -412,17 +403,18 @@ class Medicamentos(QWidget):
         )
 
 
+        self.btn_modificar.setStyleSheet(ESTILO_BOTON_SECUNDARIO)
+        self.btn_desactivar.setStyleSheet(ESTILO_BOTON_PELIGRO)
+        self.btn_reactivar.setStyleSheet(ESTILO_BOTON_SECUNDARIO)
+        self.btn_actualizar.setStyleSheet(ESTILO_BOTON_SECUNDARIO)
         self.btn_guardar.clicked.connect(
-            self.guardar_medicamento
+            self.abrir_alta
         )
 
         self.btn_modificar.clicked.connect(
-            self.modificar_medicamento
+            self.abrir_edicion
         )
 
-        self.btn_limpiar.clicked.connect(
-            self.limpiar_formulario
-        )
 
         self.btn_desactivar.clicked.connect(
             self.desactivar_medicamento
@@ -441,9 +433,6 @@ class Medicamentos(QWidget):
             self.btn_modificar
         )
 
-        layout_botones.addWidget(
-            self.btn_limpiar
-        )
 
         layout_botones.addWidget(
             self.btn_desactivar
@@ -475,13 +464,7 @@ class Medicamentos(QWidget):
         # TABLA
         # =====================================================
 
-        self.tabla = QTableWidget()
-
-        self.tabla.setColumnCount(
-            10
-        )
-
-        self.tabla.setHorizontalHeaderLabels([
+        self.tabla = tabla([
             "Nombre",
             "Presentación",
             "Cantidad",
@@ -491,55 +474,43 @@ class Medicamentos(QWidget):
             "Precio venta",
             "Stock mínimo",
             "Ubicación",
-            "Estado"
+            "Estado",
+            "Lote",
+            "Caducidad"
         ])
 
 
-        self.tabla.setSelectionBehavior(
-            QTableWidget.SelectionBehavior.SelectRows
-        )
-
-        self.tabla.setSelectionMode(
-            QTableWidget.SelectionMode.SingleSelection
-        )
-
-        self.tabla.setEditTriggers(
-            QTableWidget.EditTrigger.NoEditTriggers
-        )
-
-        self.tabla.verticalHeader().setVisible(
-            False
-        )
-
-        self.tabla.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
-
-        self.tabla.cellClicked.connect(
-            self.seleccionar_medicamento
-        )
+        self.tabla.itemSelectionChanged.connect(self.actualizar_seleccion)
+        self.tabla.cellDoubleClicked.connect(self.abrir_edicion)
 
 
         # =====================================================
         # AGREGAR TODO
         # =====================================================
 
-        layout_principal.addWidget(
-            titulo
-        )
+        layout_principal.addLayout(encabezado(titulo, descripcion, "Medicamentos"))
 
-        layout_principal.addWidget(
-            descripcion
-        )
+        layout_principal.addWidget(tarjeta(layout_filtros))
 
-        layout_principal.addLayout(
-            layout_filtros
-        )
+        self.dialogo = QDialog(self)
+        dimensionar_dialogo(self.dialogo, 660, 640)
+        contenedor = QVBoxLayout(self.dialogo)
+        desplazamiento = QScrollArea()
+        desplazamiento.setWidgetResizable(True)
+        desplazamiento.setWidget(frame_formulario)
+        contenedor.addWidget(desplazamiento)
+        acciones = QHBoxLayout()
+        acciones.addStretch()
+        cancelar = QPushButton("Cancelar")
+        cancelar.setStyleSheet(ESTILO_BOTON_SECUNDARIO)
+        cancelar.clicked.connect(self.dialogo.reject)
+        self.btn_confirmar = QPushButton("Guardar")
+        self.btn_confirmar.clicked.connect(self.confirmar_formulario)
+        acciones.addWidget(cancelar)
+        acciones.addWidget(self.btn_confirmar)
+        contenedor.addLayout(acciones)
 
-        layout_principal.addWidget(
-            frame_formulario
-        )
-
+        layout_botones.addStretch()
         layout_principal.addLayout(
             layout_botones
         )
@@ -552,6 +523,35 @@ class Medicamentos(QWidget):
     # =========================================================
     # CARGAR UBICACIONES
     # =========================================================
+
+    def actualizar_seleccion(self):
+        fila = self.tabla.currentRow()
+        seleccion = self.tabla.selectedItems()
+        item = self.tabla.item(fila, 0) if fila >= 0 and seleccion else None
+        self.id_medicamento_seleccionado = item.data(Qt.ItemDataRole.UserRole) if item else None
+        self.estado_medicamento_seleccionado = item.data(Qt.ItemDataRole.UserRole + 1) if item else None
+        self.btn_modificar.setEnabled(item is not None)
+        self.btn_desactivar.setEnabled(bool(item and self.estado_medicamento_seleccionado))
+        self.btn_reactivar.setEnabled(bool(item and not self.estado_medicamento_seleccionado))
+
+    def abrir_alta(self):
+        self.limpiar_formulario()
+        self.dialogo.setWindowTitle("Registrar medicamento")
+        self.dialogo.exec()
+
+    def abrir_edicion(self, *_):
+        fila = self.tabla.currentRow()
+        if fila >= 0 and self.tabla.selectedItems() and self.seleccionar_medicamento(fila, 0):
+            self.dialogo.setWindowTitle("Modificar medicamento")
+            self.dialogo.exec()
+
+    def confirmar_formulario(self):
+        if self.id_medicamento_seleccionado is None:
+            guardado = self.guardar_medicamento()
+        else:
+            guardado = self.modificar_medicamento()
+        if guardado:
+            self.dialogo.accept()
 
     def cargar_ubicaciones(self):
 
@@ -697,6 +697,8 @@ class Medicamentos(QWidget):
                     m.fabricante,
                     m.precioVenta,
                     m.stockMinimo,
+                    m.lote,
+                    m.fechaCaducidad,
                     m.activo,
 
                     u.codigo AS ubicacion
@@ -775,6 +777,7 @@ class Medicamentos(QWidget):
             registros = cursor.fetchall()
 
 
+            self.tabla.clearSelection()
             self.tabla.setRowCount(
                 len(registros)
             )
@@ -834,7 +837,9 @@ class Medicamentos(QWidget):
                     ),
                     registro["stockMinimo"],
                     registro["ubicacion"],
-                    estado_texto
+                    estado_texto,
+                    registro["lote"],
+                    registro["fechaCaducidad"]
                 ]
 
 
@@ -913,6 +918,8 @@ class Medicamentos(QWidget):
                     precioVenta,
                     stockMinimo,
                     idUbicacion,
+                    lote,
+                    fechaCaducidad,
                     activo
                 )
                 VALUES
@@ -920,6 +927,7 @@ class Medicamentos(QWidget):
                     %s, %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s, %s,
+                    %s, %s,
                     TRUE
                 )
             """
@@ -947,6 +955,8 @@ class Medicamentos(QWidget):
 
             self.cargar_medicamentos()
 
+
+            return True
 
         except Exception as e:
 
@@ -1086,11 +1096,17 @@ class Medicamentos(QWidget):
             self.spn_cantidad.setValue(
                 medicamento["cantidad"] or 0
             )
+            self.spn_cantidad.setEnabled(False)
+            self.spn_cantidad.setToolTip("Cambie las existencias desde Inventario.")
 
             self.txt_codigo.setText(
                 medicamento["codigoBarras"] or ""
             )
 
+            self.txt_lote.setText(medicamento["lote"] or "")
+            fecha = medicamento["fechaCaducidad"]
+            self.sin_caducidad.setChecked(fecha is None)
+            self.fecha_caducidad.setDate(QDate(fecha.year, fecha.month, fecha.day) if fecha else QDate.currentDate())
             self.txt_descripcion.setPlainText(
                 medicamento["descripcion"] or ""
             )
@@ -1146,6 +1162,8 @@ class Medicamentos(QWidget):
                     0
                 )
 
+
+            return True
 
         except Exception as e:
 
@@ -1208,7 +1226,6 @@ class Medicamentos(QWidget):
                 SET
                     nombre = %s,
                     presentacion = %s,
-                    cantidad = %s,
                     codigoBarras = %s,
                     descripcion = %s,
                     principioActivo = %s,
@@ -1217,7 +1234,9 @@ class Medicamentos(QWidget):
                     precioCompra = %s,
                     precioVenta = %s,
                     stockMinimo = %s,
-                    idUbicacion = %s
+                    idUbicacion = %s,
+                    lote = %s,
+                    fechaCaducidad = %s
 
                 WHERE idMedicamento = %s
             """
@@ -1226,6 +1245,8 @@ class Medicamentos(QWidget):
             datos = list(
                 self.obtener_datos_formulario()
             )
+
+            datos.pop(2)  # La edición conserva las existencias que administra Inventario.
 
             datos.append(
                 self.id_medicamento_seleccionado
@@ -1251,6 +1272,8 @@ class Medicamentos(QWidget):
 
             self.cargar_medicamentos()
 
+
+            return True
 
         except Exception as e:
 
@@ -1598,7 +1621,9 @@ class Medicamentos(QWidget):
             self.spn_precio_compra.value(),
             self.spn_precio_venta.value(),
             self.spn_stock_minimo.value(),
-            id_ubicacion
+            id_ubicacion,
+            self.txt_lote.text().strip() or None,
+            None if self.sin_caducidad.isChecked() else self.fecha_caducidad.date().toPyDate()
         )
 
 
@@ -1607,6 +1632,8 @@ class Medicamentos(QWidget):
     # =========================================================
 
     def limpiar_formulario(self):
+        self.spn_cantidad.setEnabled(True)
+        self.spn_cantidad.setToolTip("")
 
         self.id_medicamento_seleccionado = None
 
@@ -1621,6 +1648,9 @@ class Medicamentos(QWidget):
             0
         )
 
+        self.txt_lote.clear()
+        self.sin_caducidad.setChecked(True)
+        self.fecha_caducidad.setDate(QDate.currentDate())
         self.txt_codigo.clear()
 
         self.txt_descripcion.clear()

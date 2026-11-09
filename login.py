@@ -14,13 +14,13 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from conexion import conectar
+from seguridad import verificar_contrasena
+from ui_comun import configurar_pantalla_completa, logo_farmacia
 
 from estilos import (
     ESTILO_GENERAL,
-    ESTILO_TITULO,
-    ESTILO_SUBTITULO,
+    ESTILO_TITULO_PAGINA,
     ESTILO_LABEL,
-    ESTILO_FRAME_LOGIN,
     ESTILO_TEXTO_SECUNDARIO
 )
 
@@ -36,12 +36,13 @@ class Login(QWidget):
             "Sistema de Farmacia - Login"
         )
 
-        self.setFixedSize(
+        self.resize(
             440,
             480
         )
 
         self.crear_interfaz()
+        configurar_pantalla_completa(self)
 
 
     # =========================================================
@@ -50,244 +51,52 @@ class Login(QWidget):
 
     def crear_interfaz(self):
 
-        self.setStyleSheet(
-            ESTILO_GENERAL
-        )
-
-        # -----------------------------------------------------
-        # LAYOUT PRINCIPAL
-        # -----------------------------------------------------
-
-        layout_principal = QVBoxLayout()
-
-        layout_principal.setContentsMargins(
-            40,
-            35,
-            40,
-            35
-        )
-
-        layout_principal.setSpacing(
-            15
-        )
-
-
-        # =====================================================
-        # TÍTULO
-        # =====================================================
-
-        titulo = QLabel(
-            "SISTEMA DE FARMACIA"
-        )
-
-        titulo.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
-
-        titulo.setStyleSheet(
-            ESTILO_TITULO
-        )
-
-
-        # =====================================================
-        # SUBTÍTULO
-        # =====================================================
-
-        subtitulo = QLabel(
-            "Inicio de sesión"
-        )
-
-        subtitulo.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
-
-        subtitulo.setStyleSheet(
-            ESTILO_SUBTITULO
-        )
-
-
-        # =====================================================
-        # DESCRIPCIÓN
-        # =====================================================
-
-        descripcion = QLabel(
-            "Ingrese sus credenciales para acceder al sistema"
-        )
-
-        descripcion.setAlignment(
-            Qt.AlignmentFlag.AlignCenter
-        )
-
-        descripcion.setWordWrap(
-            True
-        )
-
-        descripcion.setStyleSheet(
-            ESTILO_TEXTO_SECUNDARIO
-        )
-
-
-        # =====================================================
-        # FRAME
-        # =====================================================
+        self.setObjectName("superficie")
+        self.setStyleSheet(ESTILO_GENERAL)
+        exterior = QVBoxLayout(self)
+        exterior.setContentsMargins(18, 18, 18, 18)
+        panel = QFrame()
+        panel.setObjectName("frameLogin")
+        panel.setMaximumWidth(440)
+        layout_principal = QVBoxLayout(panel)
+        layout_principal.setContentsMargins(0, 0, 0, 0)
+        layout_principal.setSpacing(0)
+        layout_principal.addSpacing(12)
+        layout_principal.addWidget(logo_farmacia(182, 148), alignment=Qt.AlignmentFlag.AlignHCenter)
 
         frame = QFrame()
+        layout_formulario = QVBoxLayout(frame)
+        layout_formulario.setContentsMargins(22, 8, 22, 20)
+        layout_formulario.setSpacing(6)
 
-        frame.setObjectName(
-            "frameLogin"
-        )
-
-        frame.setStyleSheet(
-            ESTILO_FRAME_LOGIN
-        )
-
-        layout_formulario = QVBoxLayout(
-            frame
-        )
-
-        layout_formulario.setContentsMargins(
-            25,
-            25,
-            25,
-            25
-        )
-
-        layout_formulario.setSpacing(
-            12
-        )
-
-
-        # =====================================================
-        # USUARIO
-        # =====================================================
-
-        lbl_usuario = QLabel(
-            "Usuario"
-        )
-
-        lbl_usuario.setStyleSheet(
-            ESTILO_LABEL
-        )
-
+        layout_formulario.addSpacing(5)
+        lbl_usuario = QLabel("Usuario")
+        lbl_usuario.setStyleSheet(ESTILO_LABEL)
         self.txt_usuario = QLineEdit()
-
-        self.txt_usuario.setPlaceholderText(
-            "Ingrese su usuario"
-        )
-
-        self.txt_usuario.setClearButtonEnabled(
-            True
-        )
-
-
-        # =====================================================
-        # CONTRASEÑA
-        # =====================================================
-
-        lbl_contrasena = QLabel(
-            "Contraseña"
-        )
-
-        lbl_contrasena.setStyleSheet(
-            ESTILO_LABEL
-        )
-
+        self.txt_usuario.setPlaceholderText("Ingrese su usuario")
+        self.txt_usuario.setClearButtonEnabled(True)
+        layout_formulario.addWidget(lbl_usuario)
+        layout_formulario.addWidget(self.txt_usuario)
+        layout_formulario.addSpacing(5)
+        lbl_contrasena = QLabel("Contraseña")
+        lbl_contrasena.setStyleSheet(ESTILO_LABEL)
         self.txt_contrasena = QLineEdit()
-
-        self.txt_contrasena.setPlaceholderText(
-            "Ingrese su contraseña"
-        )
-
-        self.txt_contrasena.setEchoMode(
-            QLineEdit.EchoMode.Password
-        )
-
-
-        # =====================================================
-        # BOTÓN
-        # =====================================================
-
-        self.btn_ingresar = QPushButton(
-            "INICIAR SESIÓN"
-        )
-
-        self.btn_ingresar.setCursor(
-            Qt.CursorShape.PointingHandCursor
-        )
-
-        self.btn_ingresar.clicked.connect(
-            self.iniciar_sesion
-        )
-
-        self.txt_contrasena.returnPressed.connect(
-            self.iniciar_sesion
-        )
-
-
-        # =====================================================
-        # AGREGAR AL FORMULARIO
-        # =====================================================
-
-        layout_formulario.addWidget(
-            lbl_usuario
-        )
-
-        layout_formulario.addWidget(
-            self.txt_usuario
-        )
-
-        layout_formulario.addSpacing(
-            5
-        )
-
-        layout_formulario.addWidget(
-            lbl_contrasena
-        )
-
-        layout_formulario.addWidget(
-            self.txt_contrasena
-        )
-
-        layout_formulario.addSpacing(
-            15
-        )
-
-        layout_formulario.addWidget(
-            self.btn_ingresar
-        )
-
-
-        # =====================================================
-        # AGREGAR AL LAYOUT PRINCIPAL
-        # =====================================================
-
-        layout_principal.addWidget(
-            titulo
-        )
-
-        layout_principal.addWidget(
-            subtitulo
-        )
-
-        layout_principal.addWidget(
-            descripcion
-        )
-
-        layout_principal.addSpacing(
-            10
-        )
-
-        layout_principal.addWidget(
-            frame
-        )
-
-        layout_principal.addStretch()
-
-
-        self.setLayout(
-            layout_principal
-        )
-
+        self.txt_contrasena.setPlaceholderText("Ingrese su contraseña")
+        self.txt_contrasena.setEchoMode(QLineEdit.EchoMode.Password)
+        layout_formulario.addWidget(lbl_contrasena)
+        layout_formulario.addWidget(self.txt_contrasena)
+        layout_formulario.addSpacing(10)
+        self.btn_ingresar = QPushButton("INICIAR SESIÓN")
+        self.btn_ingresar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_ingresar.clicked.connect(self.iniciar_sesion)
+        self.txt_contrasena.returnPressed.connect(self.iniciar_sesion)
+        layout_formulario.addWidget(self.btn_ingresar)
+        layout_principal.addWidget(frame)
+        exterior.addStretch()
+        exterior.addWidget(panel)
+        exterior.setAlignment(panel, Qt.AlignmentFlag.AlignHCenter)
+        exterior.addStretch()
+        panel.setMinimumWidth(335)
         self.txt_usuario.setFocus()
 
 
@@ -299,7 +108,7 @@ class Login(QWidget):
 
         usuario = self.txt_usuario.text().strip()
 
-        contrasena = self.txt_contrasena.text().strip()
+        contrasena = self.txt_contrasena.text()
 
 
         # =====================================================
@@ -408,10 +217,10 @@ class Login(QWidget):
             # =================================================
             # CONTRASEÑA
             #
-            # POR AHORA SIN BCRYPT
+            # BCRYPT Y COMPATIBILIDAD CON LAS CUENTAS EXISTENTES
             # =================================================
 
-            if contrasena != resultado["contrasena"]:
+            if not verificar_contrasena(contrasena, resultado["contrasena"]):
 
                 QMessageBox.warning(
                     self,
@@ -473,7 +282,7 @@ class Login(QWidget):
                 resultado
             )
 
-            self.ventana_principal.show()
+            self.ventana_principal.showFullScreen()
 
             self.close()
 
@@ -520,6 +329,7 @@ if __name__ == "__main__":
         sys.argv
     )
 
+    app.setStyleSheet(ESTILO_GENERAL)
     ventana = Login()
 
     ventana.show()
