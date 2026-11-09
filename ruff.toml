@@ -1,0 +1,8 @@
+target-version = "py311"
+
+[lint]
+select = ["E9", "F"]
+
+[lint.pyflakes]
+# Dos estilos importados históricamente por login.py.
+allowed-unused-imports = ["estilos.ESTILO_TITULO_PAGINA", "estilos.ESTILO_TEXTO_SECUNDARIO"]
