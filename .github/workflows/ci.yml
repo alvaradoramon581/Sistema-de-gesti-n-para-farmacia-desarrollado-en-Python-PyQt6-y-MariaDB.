@@ -1,0 +1,96 @@
+name: CI de farmacia
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  commits:
+    name: Convención de commits
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Validar los asuntos nuevos
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/verificar_commits.py "$BASE" "$HEAD"
+
+  compilacion:
+    name: Compilación
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+      - name: Compilar los archivos Python versionados
+        run: git ls-files -z '*.py' | xargs -0 python -m py_compile
+
+  analisis:
+    name: Análisis estático
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m ruff check .
+
+  pruebas:
+    name: Pruebas con MariaDB
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: farmacia_ci_temporal
+          MARIADB_ROOT_HOST: "%"
+        ports:
+          - "127.0.0.1:3306:3306"
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      QT_QPA_PLATFORM: offscreen
+      FARMACIA_PRUEBAS_DB: "1"
+      FARMACIA_ESQUEMA_ARCHIVO: "1"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+      - name: Instalar las bibliotecas gráficas de Qt en Linux
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 fonts-liberation
+      - run: python -m pip install -r requirements.txt
+      - name: Conectar al servicio temporal del runner
+        run: |
+          cat > "$RUNNER_TEMP/config.py" <<'PY'
+          DB_HOST = "127.0.0.1"
+          DB_USER = "root"
+          DB_PASSWORD = "farmacia_ci_temporal"
+          DB_NAME = "farmacia_ci"
+          PY
+          echo "PYTHONPATH=$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Ejecutar la suite completa
+        run: |
+          python - <<'PY'
+          import unittest
+          suite = unittest.defaultTestLoader.discover("tests")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          raise SystemExit(0 if result.testsRun and result.wasSuccessful() and not result.skipped else 1)
+          PY

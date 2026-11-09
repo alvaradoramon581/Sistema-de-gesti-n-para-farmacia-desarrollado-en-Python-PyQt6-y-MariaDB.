@@ -81,3 +81,42 @@ py -B login.py
 ```
 
 El instalador prepara las tablas de encuestas y agrega los campos de lote y caducidad a Medicamentos.
+
+## Cómo colaborar
+
+Usamos **trunk-based development**. La rama `main` concentra la versión integrada de la farmacia. Cada tarea se prepara en una rama de corta duración y se integra mediante un *pull request* (PR).
+
+1. Actualiza tu copia con `git switch main` y `git pull --ff-only`.
+2. Crea una rama para un cambio concreto, por ejemplo `git switch -c fix/consulta-empleados`.
+3. Guarda el cambio en commits pequeños y publica la rama con `git push -u origin HEAD`.
+4. Abre un PR hacia `main`, explica qué cambió y revisa los resultados de CI. Si falla alguna comprobación, corrige el problema en la misma rama. Integra el PR cuando las comprobaciones pasen y elimina la rama de la tarea.
+
+### Convención de commits
+
+Escribe el asunto como `tipo(ámbito): resumen`. El ámbito es opcional e identifica el módulo afectado. Usa un resumen breve en español que describa el cambio. Algunos ejemplos son `fix(empleados): corrige la consulta por nombre`, `test(ventas): comprueba dos ventas simultáneas` y `ci: valida el proyecto con MariaDB`.
+
+Usa `feat` para una función, `fix` para una corrección, `test` para pruebas, `docs` para documentación y `ci` para integración continua. También se aceptan `build`, `chore`, `perf`, `refactor`, `revert` y `style`. Puedes añadir `!` antes de los dos puntos para indicar un cambio incompatible. La verificación se aplica a los asuntos de commits nuevos de la tarea y omite los commits de fusión.
+
+### Integración continua
+
+GitHub Actions comprueba cada PR hacia `main` y cada actualización de `main`. En la pestaña **Checks** del PR puedes abrir los resultados de cada tarea.
+
+| Comprobación | Qué verifica |
+| --- | --- |
+| Convención de commits | Cada asunto nuevo sigue el formato del equipo. |
+| Compilación | Python 3.11 compila los archivos `.py` versionados y avisa si encuentra errores de sintaxis. |
+| Análisis estático | Ruff analiza el código y las pruebas para detectar, entre otros defectos, nombres sin definir e importaciones sin usar. Las dos excepciones heredadas para estilos del login están en `ruff.toml`. |
+| Pruebas con MariaDB | La suite ejecuta operaciones con datos ficticios en bases temporales de MariaDB 11.4 y acciona controles PyQt6 en modo `offscreen`. El trabajo falla si hay errores, si se omiten pruebas o si no se descubre ninguna. |
+
+Para reproducir las comprobaciones en PowerShell desde la raíz del repositorio, instala las dependencias de la aplicación y usa una instancia de MariaDB de desarrollo en `config.py`. La cuenta de pruebas necesita permiso para crear y eliminar sus bases temporales. Con `FARMACIA_ESQUEMA_ARCHIVO=1` la estructura inicial se lee del SQL versionado.
+
+```powershell
+py -m pip install -r requirements-dev.txt
+py scripts/verificar_commits.py origin/main HEAD
+py -m py_compile (git ls-files '*.py')
+py -m ruff check .
+$env:QT_QPA_PLATFORM = "offscreen"
+$env:FARMACIA_PRUEBAS_DB = "1"
+$env:FARMACIA_ESQUEMA_ARCHIVO = "1"
+py -B -m unittest discover -s tests -v
+```
