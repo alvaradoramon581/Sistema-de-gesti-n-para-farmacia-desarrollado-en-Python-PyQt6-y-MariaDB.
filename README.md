@@ -37,8 +37,10 @@ Una de sus principales características es el mapa interactivo de estantes, dond
 - Gestión de empleados y cuentas de acceso.
 - Captura de lote y fecha de caducidad en la ficha de Medicamentos.
 - Alertas de existencias bajas, próxima caducidad y fechas pendientes.
-- Encuestas de satisfacción.
-- Reportes de ventas, ventas por usuario, inventario y empleados con exportación CSV.
+- Encuestas de satisfacción con selección de folios de venta existentes.
+- Reportes de ventas, ventas por usuario, encuestas, inventario y empleados con exportación CSV.
+- Proveedor como dato del medicamento, visible en Inventario y editable al registrar entradas.
+- Identificación del empleado mediante folio o archivo PDF o imagen, guardado en su expediente.
 
 ## Acceso por rol
 
@@ -52,7 +54,9 @@ El administrador asigna un usuario, una contraseña y el rol al registrar o modi
 | Consultar medicamentos e inventario | Permitido | Permitido |
 | Registrar o modificar medicamentos, desactivar y reactivar | Permitido | Restringido |
 | Registrar entradas, ajustes y devoluciones | Permitido | Restringido |
-| Generar y exportar reportes | Todos los tipos y usuarios | Ventas y Ventas por usuario de su propia cuenta |
+| Generar y exportar reportes | Todos los tipos y usuarios | Ventas, Ventas por usuario y Encuestas de su propia cuenta |
+
+El reporte de Encuestas permite filtrar por fecha y por quien capturó la encuesta. El archivo de identificación se adjunta desde el formulario de empleados y se descarga con Guardar archivo. Al guardar, la base de datos conserva el archivo junto al expediente.
 
 ## Funciones pendientes
 
@@ -94,7 +98,7 @@ py -B migrar.py
 py -B login.py
 ```
 
-El instalador prepara las tablas de encuestas y agrega los campos de lote y caducidad a Medicamentos.
+El instalador prepara las tablas de encuestas y archivos de identificación, y agrega los campos de lote, caducidad y proveedor a Medicamentos. En instalaciones existentes, ejecuta `py -B migrar.py` antes de abrir esta versión.
 
 ## Cómo colaborar
 

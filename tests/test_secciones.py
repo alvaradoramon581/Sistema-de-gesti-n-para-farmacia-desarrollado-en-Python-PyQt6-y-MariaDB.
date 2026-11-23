@@ -57,6 +57,7 @@ class Auditorias(unittest.TestCase):
             def alta(form):
                 pagina.txt_nombre.setText('Prueba de caducidad')
                 pagina.txt_lote.setText('ABC-123')
+                pagina.txt_proveedor.setText('Distribuidora inicial')
                 pagina.spn_cantidad.setValue(4)
                 pagina.sin_caducidad.setChecked(False)
                 pagina.fecha_caducidad.setDate(fecha)
@@ -66,12 +67,15 @@ class Auditorias(unittest.TestCase):
             registros = self.sql('SELECT * FROM medicamentos WHERE lote=%s', ('ABC-123',), True)
             self.assertEqual(len(registros), 1)
             self.assertEqual(registros[0]['fechaCaducidad'], fecha.toPyDate())
+            self.assertEqual(registros[0]['proveedor'], 'Distribuidora inicial')
             self.assertTrue(any(r['lote']=='ABC-123' and r['tipo']=='Próxima caducidad' for r in obtener_alertas(self.admin)))
             fila = next(i for i in range(pagina.tabla.rowCount()) if pagina.tabla.item(i,0).text()=='Prueba de caducidad')
             pagina.tabla.selectRow(fila)
 
             def editar(form):
                 self.assertEqual(pagina.txt_lote.text(), 'ABC-123')
+                self.assertEqual(pagina.txt_proveedor.text(), 'Distribuidora inicial')
+                pagina.txt_proveedor.setText('Distribuidora actualizada')
                 self.assertEqual(pagina.fecha_caducidad.date(), fecha)
                 pagina.txt_lote.setText('DEF-456')
                 pagina.sin_caducidad.setChecked(True)
@@ -82,6 +86,7 @@ class Auditorias(unittest.TestCase):
             self.assertEqual(modificado['lote'], 'DEF-456')
             self.assertIsNone(modificado['fechaCaducidad'])
             self.assertEqual(modificado['cantidad'], 4)
+            self.assertEqual(modificado['proveedor'], 'Distribuidora actualizada')
             self.assertFalse(any(r['lote']=='ABC-123' for r in obtener_alertas(self.admin)))
             self.modal(pagina, 'Registrar medicamento', lambda form: form.reject())
             self.assertEqual(pagina.tabla.rowCount(),2)
@@ -277,7 +282,7 @@ class Auditorias(unittest.TestCase):
             pagina = ventana.pagina_reportes
             self.assertIs(ventana.paginas.currentWidget(), pagina)
             self.assertEqual([pagina.tipo.itemText(i) for i in range(pagina.tipo.count())],
-                             ['Ventas', 'Ventas por usuario'])
+                             ['Ventas', 'Ventas por usuario', 'Encuestas'])
             self.assertEqual(pagina.vendedor.count(), 1)
             self.assertEqual(pagina.vendedor.currentData(), cuenta['idUsuario'])
             self.assertFalse(pagina.vendedor.isEnabled())
@@ -367,6 +372,203 @@ class Auditorias(unittest.TestCase):
                     self.assertEqual(self.sql('SELECT * FROM medicamentos', filas=True), anterior)
             informacion.assert_not_called()
             error.assert_not_called()
+
+    def test_encuesta_selecciona_folios_existentes_y_autorizados(self):
+        from encuestas import DialogoEncuesta, listar_encuestas
+        import servicios
+
+        self.interfaz()
+        linea = {'idMedicamento': self.producto, 'cantidad': 1, 'precioUnitario': '10.15'}
+        propia, _, _ = servicios.registrar_venta(self.empleado, [linea], 'EFECTIVO')
+        ajena, _, _ = servicios.registrar_venta(self.admin, [linea], 'TARJETA')
+        form = DialogoEncuesta(self.empleado)
+        self.addCleanup(form.close)
+        self.assertFalse(form.venta.isEditable())
+        self.assertEqual([form.venta.itemData(i) for i in range(form.venta.count())], [None, propia])
+        form.venta.setCurrentIndex(form.venta.findData(propia))
+        form.calificacion.button(4).click()
+        form.comentario.setPlainText('Venta seleccionada')
+        form.btn_guardar.click()
+        registro = listar_encuestas(self.empleado)[0]
+        self.assertEqual(registro['idVenta'], propia)
+        consulta = DialogoEncuesta(self.empleado, registro)
+        self.addCleanup(consulta.close)
+        self.assertEqual(consulta.venta.currentData(), propia)
+        self.assertFalse(consulta.venta.isEnabled())
+        admin = DialogoEncuesta(self.admin)
+        self.addCleanup(admin.close)
+        self.assertEqual({admin.venta.itemData(i) for i in range(admin.venta.count())}, {None, propia, ajena})
+        self.aviso.assert_not_called()
+
+        # Una venta eliminada después de abrir el formulario se rechaza al guardar.
+        pendiente = DialogoEncuesta(self.empleado)
+        self.addCleanup(pendiente.close)
+        pendiente.venta.setCurrentIndex(pendiente.venta.findData(propia))
+        pendiente.calificacion.button(5).click()
+        self.sql('UPDATE movimientos_inventario SET idVenta=NULL WHERE idVenta=%s', (propia,))
+        self.sql('DELETE FROM detalle_venta WHERE idVenta=%s', (propia,))
+        self.sql('DELETE FROM ventas WHERE idVenta=%s', (propia,))
+        pendiente.btn_guardar.click()
+        self.aviso.assert_called_once()
+        self.assertEqual(len(listar_encuestas(self.empleado)), 1)
+
+    def test_reporte_encuestas_por_fecha_autor_y_csv(self):
+        import csv
+        from datetime import date
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from encuestas import registrar_encuesta
+        from reportes import Reportes, generar_reporte
+
+        self.interfaz()
+        propia = registrar_encuesta(self.empleado, 5, 'Atención rápida; gracias')
+        otra = registrar_encuesta(self.admin, 3, 'Atención regular')
+        anterior = self.sql("INSERT INTO encuestas (calificacion,comentario) VALUES (4,'Anterior sin autor')")
+        for eid in (propia, otra, anterior):
+            self.sql("UPDATE encuestas SET fecha='2026-11-20 23:59:59' WHERE idEncuesta=%s", (eid,))
+        fuera = registrar_encuesta(self.empleado, 1, 'Fuera de rango')
+        self.sql("UPDATE encuestas SET fecha='2026-11-21 00:00:00' WHERE idEncuesta=%s", (fuera,))
+        dia = date(2026, 11, 20)
+        columnas, todas = generar_reporte(self.admin, 'Encuestas', dia, dia)
+        self.assertEqual(len(todas), 3)
+        self.assertTrue(any(fila[-1] == 'Registro anterior' for fila in todas))
+        for usuario in (self.empleado, {**self.empleado, 'rol': 'ADMIN'}):
+            _, filas = generar_reporte(usuario, 'Encuestas', dia, dia)
+            self.assertEqual(len(filas), 1)
+            self.assertTrue(filas[0][0].startswith(f'#{propia} · '))
+            self.assertEqual(filas[0][2:5], ['Sin venta', 5, 'Muy satisfecho'])
+            with self.assertRaises(ValueError):
+                generar_reporte(usuario, 'Encuestas', dia, dia, self.admin['idUsuario'])
+        _, filtradas = generar_reporte(self.admin, 'Encuestas', dia, dia, self.empleado['idUsuario'])
+        self.assertEqual(len(filtradas), 1)
+
+        pagina = Reportes(self.empleado)
+        self.addCleanup(pagina.close)
+        pagina.preparar()
+        pagina.tipo.setCurrentText('Encuestas')
+        pagina.desde.setDate(QDate(2026, 11, 20))
+        pagina.hasta.setDate(QDate(2026, 11, 20))
+        self.pulsar(pagina, 'Generar reporte')
+        self.assertEqual(pagina.tabla.rowCount(), 1)
+        with TemporaryDirectory() as carpeta:
+            ruta = Path(carpeta) / 'encuestas.csv'
+            with patch('reportes.QFileDialog.getSaveFileName', return_value=(str(ruta), 'CSV')), \
+                 patch.object(QMessageBox, 'information'):
+                self.pulsar(pagina, 'Exportar CSV')
+            with ruta.open(encoding='utf-8-sig', newline='') as archivo:
+                exportadas = list(csv.reader(archivo, delimiter=';'))
+            self.assertEqual(exportadas[0], columnas)
+            self.assertEqual(len(exportadas), 2)
+            self.assertEqual(exportadas[1][5], 'Atención rápida; gracias')
+        self.aviso.assert_not_called()
+
+    def test_proveedor_en_entrada_inventario_y_reporte(self):
+        from datetime import date
+        from inventario import Inventario
+        from reportes import generar_reporte
+        import servicios
+
+        self.interfaz()
+        self.sql("UPDATE medicamentos SET proveedor='Proveedor original'")
+        with patch('inventario.conectar', self.conectar_pruebas), \
+             patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes), \
+             patch.object(QMessageBox, 'information'):
+            pagina = Inventario(self.admin)
+            self.addCleanup(pagina.close)
+            pagina.seleccionar_medicamento(0, 0)
+            self.assertEqual(pagina.txt_proveedor.text(), 'Proveedor original')
+            pagina.txt_proveedor.setText('Proveedor actualizado')
+            pagina.spn_cantidad.setValue(3)
+            pagina.btn_registrar.click()
+            producto = self.sql('SELECT cantidad, proveedor FROM medicamentos', filas=True)[0]
+            self.assertEqual(producto, {'cantidad': 13, 'proveedor': 'Proveedor actualizado'})
+            self.assertEqual(pagina.tabla.item(0, 8).text(), 'Proveedor actualizado')
+            pagina.seleccionar_medicamento(0, 0)
+            pagina.cmb_tipo.setCurrentIndex(pagina.cmb_tipo.findData('AJUSTE'))
+            self.assertTrue(pagina.txt_proveedor.isReadOnly())
+            columnas, filas = generar_reporte(self.admin, 'Inventario', date.today(), date.today())
+            self.assertEqual(filas[0][columnas.index('Proveedor')], 'Proveedor actualizado')
+        with self.assertRaisesRegex(ValueError, 'existencia cambió'):
+            servicios.movimiento_manual(self.admin, self.producto, 'ENTRADA', 1, '', 10, proveedor='No guardar')
+        with self.assertRaisesRegex(ValueError, 'administrador'):
+            servicios.movimiento_manual(self.empleado, self.producto, 'ENTRADA', 1, '', 13, proveedor='No guardar')
+        self.assertEqual(self.sql('SELECT proveedor FROM medicamentos', filas=True)[0]['proveedor'], 'Proveedor actualizado')
+        self.aviso.assert_not_called()
+
+    def test_adjuntar_identificacion_guardar_reemplazar_y_descargar(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from PyQt6.QtGui import QImage, QPdfWriter, QPainter
+        from empleados import DialogoEmpleado
+        import servicios
+
+        self.interfaz()
+        with TemporaryDirectory() as carpeta:
+            pdf = Path(carpeta) / 'identificacion.pdf'
+            escritor = QPdfWriter(str(pdf))
+            pintor = QPainter(escritor)
+            pintor.drawText(100, 100, 'Identificación ficticia de prueba')
+            pintor.end()
+            del escritor
+            contenido = pdf.read_bytes()
+            imagen = Path(carpeta) / 'identificacion.png'
+            muestra = QImage(20, 20, QImage.Format.Format_RGB32)
+            muestra.fill(0xffffff)
+            self.assertTrue(muestra.save(str(imagen)))
+            form = DialogoEmpleado(self.admin)
+            self.addCleanup(form.close)
+            for clave, campo in form.campos.items():
+                campo.setText(self.datos[clave])
+            form.campos['identificacion'].clear()
+            form.fecha.setDate(QDate(1995, 1, 2))
+            form.nombre_usuario.setText(self.cuenta['usuario'])
+            form.clave.setText(self.cuenta['contrasena'])
+            form.repetir.setText(self.cuenta['contrasena'])
+            with patch('empleados.QFileDialog.getOpenFileName', return_value=(str(pdf), 'PDF')):
+                form.btn_adjuntar.click()
+            self.assertEqual(self.sql('SELECT * FROM empleado_documento', filas=True), [])
+            form.btn_guardar.click()
+            empleado = servicios.listar_empleados(self.admin)[0]
+            eid = empleado['idEmpleado']
+            self.assertEqual(empleado['documentoNombre'], pdf.name)
+            pdf.unlink()
+            consulta = DialogoEmpleado(self.admin, empleado, consulta=True)
+            self.addCleanup(consulta.close)
+            destino = Path(carpeta) / 'descarga.pdf'
+            with patch('empleados.QFileDialog.getSaveFileName', return_value=(str(destino), 'PDF')):
+                consulta.btn_descargar.click()
+            self.assertEqual(destino.read_bytes(), contenido)
+            with self.assertRaisesRegex(ValueError, 'administrador'):
+                servicios.consultar_documento_empleado(self.empleado, eid)
+
+            edicion = DialogoEmpleado(self.admin, empleado)
+            self.addCleanup(edicion.close)
+            with patch('empleados.QFileDialog.getOpenFileName', return_value=(str(imagen), 'PNG')):
+                edicion.btn_adjuntar.click()
+            self.assertEqual(servicios.consultar_documento_empleado(self.admin, eid)['contenido'], contenido)
+            edicion.btn_guardar.click()
+            self.assertEqual(servicios.consultar_documento_empleado(self.admin, eid)['contenido'], imagen.read_bytes())
+            datos = {**self.datos, 'identificacion': ''}
+            servicios.guardar_empleado(self.admin, datos, {**self.cuenta, 'contrasena': ''}, eid)
+            self.assertEqual(servicios.consultar_documento_empleado(self.admin, eid)['nombre'], imagen.name)
+            for documento in ({'nombre': 'falso.png', 'contenido': b'No es una imagen'},
+                              {'nombre': 'falso.pdf', 'contenido': b'No es un PDF'},
+                              {'nombre': 'archivo.exe', 'contenido': b'MZ'}):
+                with self.assertRaises(ValueError):
+                    servicios.guardar_empleado(self.admin, datos, self.cuenta, eid, documento=documento)
+            self.assertEqual(servicios.consultar_documento_empleado(self.admin, eid)['contenido'], imagen.read_bytes())
+            from migrar import aplicar
+            conexion = self.conectar_pruebas()
+            try:
+                aplicar(conexion)
+                aplicar(conexion)
+            finally:
+                conexion.close()
+            self.assertEqual(servicios.consultar_documento_empleado(self.admin, eid)['contenido'], imagen.read_bytes())
+            servicios.cambiar_empleado(self.admin, eid, 'eliminar')
+            self.assertEqual(self.sql('SELECT * FROM empleado_documento', filas=True), [])
+        self.aviso.assert_not_called()
+        self.assertEqual(self.fallos, [])
 
     def test_menu_y_reportes_activos(self):
         from principal import Principal

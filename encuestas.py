@@ -1,11 +1,11 @@
 from PyQt6.QtCore import Qt, QSize, QPointF
 from PyQt6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
-from PyQt6.QtWidgets import (QSpinBox, QComboBox, QPlainTextEdit, QLabel, QWidget,
+from PyQt6.QtWidgets import (QComboBox, QPlainTextEdit, QLabel, QWidget,
                              QHBoxLayout, QToolButton, QButtonGroup, QSizePolicy)
 from listados import Listado,Formulario
 from ui_comun import boton,manejar_errores,dimensionar_dialogo
 from estilos import ESTILO_CARITAS
-from servicios import transaccion,autorizar
+from servicios import transaccion,autorizar,listar_ventas
 
 
 CALIFICACIONES = ('Muy insatisfecho', 'Insatisfecho', 'Neutral', 'Satisfecho', 'Muy satisfecho')
@@ -91,7 +91,17 @@ class DialogoEncuesta(Formulario):
         self.usuario=usuario
         self.folio = folio_encuesta(registro['idEncuesta'], registro['fecha']) if registro else None
         self.form.addRow('Folio de encuesta', QLabel(self.folio or 'Se asigna al guardar.'))
-        self.venta=QSpinBox(); self.venta.setRange(0,2147483647); self.venta.setSpecialValueText('Sin venta asociada')
+        self.venta = QComboBox()
+        self.venta.addItem('Sin venta asociada', None)
+        if registro:
+            if registro['idVenta'] is not None:
+                self.venta.addItem(f"#{registro['idVenta']}", registro['idVenta'])
+                self.venta.setCurrentIndex(1)
+        else:
+            for venta in listar_ventas(usuario):
+                self.venta.addItem(
+                    f"#{venta['idVenta']} · {venta['fecha']:%d/%m/%Y %H:%M} · $ {venta['total']:,.2f}",
+                    venta['idVenta'])
         selector = QWidget()
         fila = QHBoxLayout(selector)
         fila.setContentsMargins(0, 0, 0, 0)
@@ -116,7 +126,6 @@ class DialogoEncuesta(Formulario):
         self.form.addRow(selector)
         self.form.addRow('Comentario',self.comentario)
         if registro:
-            self.venta.setValue(registro['idVenta'] or 0)
             self.calificacion.button(registro['calificacion']).setChecked(True)
             self.comentario.setPlainText(registro['comentario'] or '')
             self.venta.setEnabled(False); selector.setEnabled(False); self.comentario.setReadOnly(True)
@@ -128,7 +137,7 @@ class DialogoEncuesta(Formulario):
         if nota < 1:
             raise ValueError('Seleccione una carita para calificar la atención.')
         numero, fecha = registrar_encuesta_con_fecha(
-            self.usuario, nota, self.comentario.toPlainText(), self.venta.value() or None)
+            self.usuario, nota, self.comentario.toPlainText(), self.venta.currentData())
         self.folio = folio_encuesta(numero, fecha)
         self.accept()
 

@@ -32,6 +32,9 @@ def aplicar(conexion):
     cur = conexion.cursor()
     try:
         preparar_ficha_medicamento(cur)
+        cur.execute("SHOW COLUMNS FROM medicamentos LIKE 'proveedor'")
+        if not cur.fetchone():
+            cur.execute('ALTER TABLE medicamentos ADD COLUMN proveedor VARCHAR(150) NULL')
         for sentencia in sql.split(';'):
             if sentencia.strip():
                 cur.execute(sentencia)
