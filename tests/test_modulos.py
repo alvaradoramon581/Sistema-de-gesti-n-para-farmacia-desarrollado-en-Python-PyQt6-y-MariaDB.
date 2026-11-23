@@ -105,7 +105,7 @@ class IntegracionTests(unittest.TestCase):
         return dict(idMedicamento=self.producto, cantidad=cantidad, precioUnitario=Decimal('10.15'))
 
     def test_venta_detalle_inventario_y_filtros(self):
-        vid, total, alertas = servicios.registrar_venta(self.admin, [self.linea(7)], 'TARJETA')
+        vid, total, alertas = servicios.registrar_venta(self.empleado, [self.linea(7)], 'TARJETA')
         self.assertEqual(total, Decimal('71.05'))
         self.assertEqual(len(alertas), 1)
         venta, detalle = servicios.consultar_venta(self.admin, vid)
@@ -114,7 +114,7 @@ class IntegracionTests(unittest.TestCase):
         self.assertEqual(self.sql('SELECT cantidad FROM medicamentos', filas=True)[0]['cantidad'], 3)
         mov = self.sql('SELECT * FROM movimientos_inventario', filas=True)[0]
         self.assertEqual((mov['idVenta'],mov['cantidadAnterior'],mov['cantidadNueva']), (vid,10,3))
-        self.assertEqual(len(servicios.listar_ventas(self.admin, str(vid))), 1)
+        self.assertEqual(len(servicios.listar_ventas(self.empleado, str(vid))), 1)
         self.assertEqual(servicios.listar_ventas(self.admin, desde=date(2000,1,1), hasta=date(2000,1,2)), [])
 
     def test_ventas_invalidas_no_escriben(self):
@@ -143,7 +143,6 @@ class IntegracionTests(unittest.TestCase):
             self.sql('DROP TRIGGER fallo_prueba')
 
     def test_ventas_simultaneas_no_sobrevenden(self):
-        self.sql("UPDATE usuarios SET rol='ADMIN' WHERE idUsuario=%s", (self.empleado['idUsuario'],))
         def vender(usuario):
             try:
                 servicios.registrar_venta(usuario, [self.linea(7)], 'EFECTIVO')
@@ -225,10 +224,7 @@ class IntegracionTests(unittest.TestCase):
         from reportes import generar_reporte, vendedores
 
         ajena, _, _ = servicios.registrar_venta(self.admin, [self.linea()], 'EFECTIVO')
-        propia = self.sql("""INSERT INTO ventas (idUsuario,metodoPago,subtotal,total)
-                             VALUES (%s,'TARJETA',10.15,10.15)""", (self.empleado['idUsuario'],))
-        self.sql("""INSERT INTO detalle_venta (idVenta,idMedicamento,cantidad,precioUnitario,subtotal)
-                    VALUES (%s,%s,1,10.15,10.15)""", (propia, self.producto))
+        propia, _, _ = servicios.registrar_venta(self.empleado, [self.linea(1)], 'TARJETA')
         for sesion in (self.empleado, {**self.empleado, 'rol': 'ADMIN'}):
             with self.subTest(sesion=sesion):
                 self.assertEqual([v['idVenta'] for v in servicios.listar_ventas(sesion)], [propia])
@@ -253,15 +249,15 @@ class IntegracionTests(unittest.TestCase):
         self.sql('UPDATE usuarios SET activo=0 WHERE idUsuario=%s', (self.empleado['idUsuario'],))
         with self.assertRaises(ValueError):
             generar_reporte(self.empleado, 'Ventas', date.today(), date.today())
+        with self.assertRaisesRegex(ValueError, 'inactiva'):
+            servicios.registrar_venta(self.empleado, [self.linea()], 'EFECTIVO')
 
-    def test_empleado_no_modifica_ventas_inventario_ni_empleados(self):
+    def test_empleado_no_modifica_inventario_ni_empleados(self):
         eid = servicios.guardar_empleado(self.admin, self.datos, self.cuenta)
         tablas = ('usuarios', 'empleados', 'ventas', 'detalle_venta', 'medicamentos', 'movimientos_inventario')
         anterior = {tabla: self.sql('SELECT * FROM ' + tabla, filas=True) for tabla in tablas}
         for sesion in (self.empleado, {**self.empleado, 'rol': 'ADMIN'}):
             with self.subTest(sesion=sesion):
-                with self.assertRaisesRegex(ValueError, 'administrador'):
-                    servicios.registrar_venta(sesion, [self.linea()], 'EFECTIVO')
                 for tipo in ('ENTRADA', 'AJUSTE', 'DEVOLUCION'):
                     with self.assertRaisesRegex(ValueError, 'administrador'):
                         servicios.movimiento_manual(sesion, self.producto, tipo, 1, 'Prueba', 10)
@@ -279,8 +275,8 @@ class IntegracionTests(unittest.TestCase):
         from reportes import generar_reporte
 
         self.sql("UPDATE usuarios SET rol='EMPLEADO' WHERE idUsuario=%s", (self.admin['idUsuario'],))
-        with self.assertRaisesRegex(ValueError, 'administrador'):
-            servicios.registrar_venta(self.admin, [self.linea()], 'EFECTIVO')
+        venta, _, _ = servicios.registrar_venta(self.admin, [self.linea()], 'EFECTIVO')
+        self.assertEqual(servicios.consultar_venta(self.admin, venta)[0]['idUsuario'], self.admin['idUsuario'])
         with self.assertRaisesRegex(ValueError, 'administrador'):
             servicios.movimiento_manual(self.admin, self.producto, 'ENTRADA', 1, '', 10)
         with self.assertRaisesRegex(ValueError, 'administrador'):

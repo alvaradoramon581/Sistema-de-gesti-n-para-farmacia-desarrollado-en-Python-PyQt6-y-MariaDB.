@@ -76,7 +76,7 @@ def registrar_venta(usuario, lineas, metodo):
             raise ValueError('Hay productos repetidos en la venta.')
         ids.add(linea['idMedicamento'])
     with transaccion() as cur:
-        autorizar(cur, usuario, administrador=True, bloquear=True)
+        autorizar(cur, usuario, bloquear=True)
         total = Decimal('0.00')
         productos = []
         # Orden fijo y bloqueo de filas para evitar sobreventa entre dos cajas.
