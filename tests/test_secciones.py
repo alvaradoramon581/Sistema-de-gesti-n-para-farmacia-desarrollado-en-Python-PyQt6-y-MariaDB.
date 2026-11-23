@@ -51,7 +51,7 @@ class Auditorias(unittest.TestCase):
         from alertas import obtener_alertas
         self.interfaz()
         with patch('medicamentos.conectar', self.conectar_pruebas), patch.object(QMessageBox, 'information'), patch.object(QMessageBox, 'critical') as error:
-            pagina = Medicamentos()
+            pagina = Medicamentos(self.admin)
             fecha = QDate.currentDate().addDays(12)
 
             def alta(form):
@@ -91,11 +91,11 @@ class Auditorias(unittest.TestCase):
     def test_existencias_sin_clasificacion(self):
         import servicios
         linea = {'idMedicamento': self.producto, 'cantidad': 1, 'precioUnitario': '10.15'}
-        servicios.registrar_venta(self.empleado, [linea], 'EFECTIVO')
+        servicios.registrar_venta(self.admin, [linea], 'EFECTIVO')
         self.assertEqual(servicios.movimiento_manual(self.admin,self.producto,'AJUSTE',5,'Conteo',9), 5)
         self.sql('UPDATE medicamentos SET fechaCaducidad=CURDATE() WHERE idMedicamento=%s', (self.producto,))
         with self.assertRaisesRegex(ValueError, 'caducado'):
-            servicios.registrar_venta(self.empleado, [linea], 'EFECTIVO')
+            servicios.registrar_venta(self.admin, [linea], 'EFECTIVO')
         self.assertEqual(self.sql('SELECT cantidad FROM medicamentos',filas=True)[0]['cantidad'],5)
         with self.assertRaisesRegex(ValueError,'existencia cambió'):
             servicios.movimiento_manual(self.admin,self.producto,'ENTRADA',2,'',9)
@@ -224,6 +224,141 @@ class Auditorias(unittest.TestCase):
             exportar_csv(ruta,['Nombre'],[['=SUM(1,2)']])
             self.assertIn("'=SUM",ruta.read_text(encoding='utf-8-sig'))
         self.aviso.assert_not_called()
+
+    def test_login_empleado_y_exportacion_de_reportes_propios(self):
+        import csv
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from login import Login
+        import servicios
+
+        self.interfaz()
+        eid = servicios.guardar_empleado(self.admin, self.datos, self.cuenta)
+        cuenta = servicios.consultar_empleado(self.admin, eid)
+        propia = self.sql("""INSERT INTO ventas (idUsuario,metodoPago,subtotal,total)
+                             VALUES (%s,'EFECTIVO',12.30,12.30)""", (cuenta['idUsuario'],))
+        self.sql("""INSERT INTO ventas (idUsuario,metodoPago,subtotal,total)
+                    VALUES (%s,'TARJETA',20,20)""", (self.admin['idUsuario'],))
+        with patch('login.conectar', self.conectar_pruebas), \
+             patch('mapa.conectar', self.conectar_pruebas), \
+             patch('inventario.conectar', self.conectar_pruebas), \
+             patch('medicamentos.conectar', self.conectar_pruebas), \
+             patch.object(QMessageBox, 'critical') as error:
+            login = Login()
+            self.addCleanup(login.close)
+            login.txt_usuario.setText(self.cuenta['usuario'])
+            login.txt_contrasena.setText(self.cuenta['contrasena'])
+            login.iniciar_sesion()
+            ventana = login.ventana_principal
+            self.assertIsNotNone(ventana)
+            self.addCleanup(ventana.close)
+            self.addCleanup(ventana.pagina_buscar.detener_parpadeo)
+            self.assertEqual(ventana.usuario['idUsuario'], cuenta['idUsuario'])
+            self.assertEqual(ventana.usuario['rol'], 'EMPLEADO')
+            self.assertTrue(ventana.btn_empleados.isHidden())
+            self.assertFalse(ventana.btn_reportes.isHidden())
+            ventana.btn_ventas.click()
+            self.assertEqual([r['idVenta'] for r in ventana.pagina_ventas.registros], [propia])
+            self.assertTrue(ventana.pagina_ventas.btn_nueva.isHidden())
+            self.assertFalse(ventana.pagina_ventas.btn_nueva.isEnabled())
+            ventana.btn_reportes.click()
+            pagina = ventana.pagina_reportes
+            self.assertIs(ventana.paginas.currentWidget(), pagina)
+            self.assertEqual([pagina.tipo.itemText(i) for i in range(pagina.tipo.count())],
+                             ['Ventas', 'Ventas por usuario'])
+            self.assertEqual(pagina.vendedor.count(), 1)
+            self.assertEqual(pagina.vendedor.currentData(), cuenta['idUsuario'])
+            self.assertFalse(pagina.vendedor.isEnabled())
+            self.assertEqual(pagina.tabla.rowCount(), 1)
+            self.assertEqual(pagina.tabla.item(0, 0).text(), str(propia))
+            with TemporaryDirectory() as carpeta:
+                ruta = Path(carpeta) / 'mis_ventas.csv'
+                with patch('reportes.QFileDialog.getSaveFileName', return_value=(str(ruta), 'CSV')), \
+                     patch.object(QMessageBox, 'information'):
+                    self.pulsar(pagina, 'Exportar CSV')
+                with ruta.open(encoding='utf-8-sig', newline='') as archivo:
+                    filas = list(csv.reader(archivo, delimiter=';'))
+                self.assertEqual(len(filas), 2)
+                self.assertEqual(filas[1][0], str(propia))
+                self.assertEqual(filas[1][2], self.datos['nombre'])
+            pagina.tipo.setCurrentText('Ventas por usuario')
+            self.pulsar(pagina, 'Generar reporte')
+            self.assertEqual(pagina.tabla.rowCount(), 1)
+            self.assertEqual(pagina.tabla.item(0, 0).text(), str(cuenta['idUsuario']))
+            self.assertFalse(pagina.vendedor.isEnabled())
+            error.assert_not_called()
+            self.aviso.assert_not_called()
+
+    def test_interfaz_empleado_bloquea_acciones_de_escritura(self):
+        from PyQt6.QtWidgets import QDialog
+        from principal import Principal
+        from empleados import DialogoEmpleado
+        from ventas import DialogoVenta
+
+        self.interfaz()
+        with patch('mapa.conectar', self.conectar_pruebas), \
+             patch('inventario.conectar', self.conectar_pruebas), \
+             patch('medicamentos.conectar', self.conectar_pruebas), \
+             patch.object(QDialog, 'exec') as modal, \
+             patch.object(QMessageBox, 'question') as confirmacion:
+            ventana = Principal(self.empleado)
+            self.addCleanup(ventana.close)
+            self.addCleanup(ventana.pagina_buscar.detener_parpadeo)
+            ventana.btn_medicamentos.click()
+            medicamentos = ventana.pagina_medicamentos
+            self.assertGreater(medicamentos.tabla.rowCount(), 0)
+            medicamentos.tabla.selectRow(0)
+            for control in (medicamentos.btn_guardar, medicamentos.btn_modificar,
+                            medicamentos.btn_desactivar, medicamentos.btn_reactivar):
+                self.assertTrue(control.isHidden())
+                self.assertFalse(control.isEnabled())
+            medicamentos.abrir_alta()
+            medicamentos.tabla.cellDoubleClicked.emit(0, 0)
+            ventana.btn_inventario.click()
+            inventario = ventana.pagina_inventario
+            inventario.seleccionar_medicamento(0, 0)
+            self.assertTrue(inventario.panel_movimiento.isHidden())
+            self.assertFalse(inventario.btn_registrar.isEnabled())
+            inventario.registrar_movimiento()
+            ventana.pagina_ventas.nueva()
+            ventana.pagina_empleados.nuevo()
+            with self.assertRaisesRegex(ValueError, 'administrador'):
+                DialogoEmpleado(self.empleado)
+            with self.assertRaisesRegex(ValueError, 'administrador'):
+                DialogoVenta(self.empleado)
+            modal.assert_not_called()
+            confirmacion.assert_not_called()
+            self.assertEqual(self.aviso.call_count, 5)
+            self.assertEqual(self.fallos, [])
+
+    def test_medicamentos_valida_rol_vigente_en_cada_escritura(self):
+        from medicamentos import Medicamentos
+
+        self.interfaz()
+        with patch('medicamentos.conectar', self.conectar_pruebas), \
+             patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes), \
+             patch.object(QMessageBox, 'information') as informacion, \
+             patch.object(QMessageBox, 'critical') as error:
+            pagina = Medicamentos(self.admin)
+            self.addCleanup(pagina.close)
+            self.addCleanup(pagina.dialogo.close)
+            pagina.tabla.selectRow(0)
+            pagina.seleccionar_medicamento(0, 0)
+            pagina.txt_nombre.setText('Cambio prohibido')
+            anterior = self.sql('SELECT * FROM medicamentos', filas=True)
+            # La ventana conserva la sesión anterior mientras cambia el rol en la base.
+            self.sql("UPDATE usuarios SET rol='EMPLEADO' WHERE idUsuario=%s", (self.admin['idUsuario'],))
+            for operacion in (pagina.guardar_medicamento, pagina.modificar_medicamento,
+                              pagina.desactivar_medicamento, pagina.reactivar_medicamento):
+                with self.subTest(operacion=operacion.__name__):
+                    pagina.estado_medicamento_seleccionado = operacion != pagina.reactivar_medicamento
+                    self.aviso.reset_mock()
+                    operacion()
+                    self.aviso.assert_called_once()
+                    self.assertIn('administrador', self.aviso.call_args.args[2])
+                    self.assertEqual(self.sql('SELECT * FROM medicamentos', filas=True), anterior)
+            informacion.assert_not_called()
+            error.assert_not_called()
 
     def test_menu_y_reportes_activos(self):
         from principal import Principal

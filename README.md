@@ -40,6 +40,20 @@ Una de sus principales características es el mapa interactivo de estantes, dond
 - Encuestas de satisfacción.
 - Reportes de ventas, ventas por usuario, inventario y empleados con exportación CSV.
 
+## Acceso por rol
+
+El administrador asigna un usuario, una contraseña y el rol al registrar o modificar un empleado. Los expedientes existentes sin cuenta permiten completar esos datos desde Modificar. Al editar una cuenta vinculada, dejar la contraseña vacía conserva la contraseña actual.
+
+| Operación | ADMIN | EMPLEADO |
+| --- | --- | --- |
+| Administrar empleados y cuentas | Permitido | Restringido |
+| Consultar ventas y su detalle | Todas las ventas | Sus propias ventas |
+| Registrar ventas | Permitido | Restringido |
+| Consultar medicamentos e inventario | Permitido | Permitido |
+| Registrar o modificar medicamentos, desactivar y reactivar | Permitido | Restringido |
+| Registrar entradas, ajustes y devoluciones | Permitido | Restringido |
+| Generar y exportar reportes | Todos los tipos y usuarios | Ventas y Ventas por usuario de su propia cuenta |
+
 ## Funciones pendientes
 
 - Migración de las contraseñas antiguas (las cuentas creadas o actualizadas desde Empleados ya usan bcrypt).

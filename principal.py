@@ -409,7 +409,7 @@ class Principal(QMainWindow):
         # MEDICAMENTOS
         # =====================================================
 
-        self.pagina_medicamentos = Medicamentos()
+        self.pagina_medicamentos = Medicamentos(self.usuario)
 
 
         # =====================================================
@@ -834,9 +834,6 @@ class Principal(QMainWindow):
     # =========================================================
 
     def abrir_reportes(self):
-        if self.usuario['rol'] != 'ADMIN':
-            QMessageBox.warning(self, 'Acceso denegado', 'Solo el administrador puede consultar reportes.')
-            return
         self.pagina_reportes.preparar()
 
         self.paginas.setCurrentWidget(
@@ -876,7 +873,6 @@ class Principal(QMainWindow):
         if rol == "EMPLEADO":
 
             self.btn_empleados.hide()
-            self.btn_reportes.hide()
 
 
     # =========================================================
