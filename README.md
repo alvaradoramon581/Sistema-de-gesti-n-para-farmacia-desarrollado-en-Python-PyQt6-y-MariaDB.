@@ -48,7 +48,7 @@ El administrador asigna un usuario, una contraseña y el rol al registrar o modi
 | --- | --- | --- |
 | Administrar empleados y cuentas | Permitido | Restringido |
 | Consultar ventas y su detalle | Todas las ventas | Sus propias ventas |
-| Registrar ventas | Permitido | Restringido |
+| Registrar ventas | Permitido | Permitido, a nombre de su propia cuenta |
 | Consultar medicamentos e inventario | Permitido | Permitido |
 | Registrar o modificar medicamentos, desactivar y reactivar | Permitido | Restringido |
 | Registrar entradas, ajustes y devoluciones | Permitido | Restringido |

@@ -13,7 +13,7 @@ class DialogoVenta(QDialog):
     def __init__(self, usuario, parent=None):
         super().__init__(parent)
         with servicios.transaccion() as cur:
-            servicios.autorizar(cur, usuario, administrador=True)
+            servicios.autorizar(cur, usuario)
         self.usuario = usuario
         self.productos = []
         self.carrito = {}
@@ -218,8 +218,6 @@ class Ventas(QWidget):
         layout.addWidget(tarjeta(filtros, fechas))
         acciones = QHBoxLayout()
         self.btn_nueva = boton('Registrar venta', self.nueva)
-        self.btn_nueva.setVisible(self.usuario.get('rol') == 'ADMIN')
-        self.btn_nueva.setEnabled(self.usuario.get('rol') == 'ADMIN')
         acciones.addWidget(self.btn_nueva)
         self.btn_consultar = boton('Consultar detalle', self.consultar, True)
         self.btn_consultar.setEnabled(False)

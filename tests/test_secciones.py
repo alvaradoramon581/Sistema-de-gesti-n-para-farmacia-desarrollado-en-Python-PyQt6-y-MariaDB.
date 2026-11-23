@@ -235,8 +235,6 @@ class Auditorias(unittest.TestCase):
         self.interfaz()
         eid = servicios.guardar_empleado(self.admin, self.datos, self.cuenta)
         cuenta = servicios.consultar_empleado(self.admin, eid)
-        propia = self.sql("""INSERT INTO ventas (idUsuario,metodoPago,subtotal,total)
-                             VALUES (%s,'EFECTIVO',12.30,12.30)""", (cuenta['idUsuario'],))
         self.sql("""INSERT INTO ventas (idUsuario,metodoPago,subtotal,total)
                     VALUES (%s,'TARJETA',20,20)""", (self.admin['idUsuario'],))
         with patch('login.conectar', self.conectar_pruebas), \
@@ -258,9 +256,23 @@ class Auditorias(unittest.TestCase):
             self.assertTrue(ventana.btn_empleados.isHidden())
             self.assertFalse(ventana.btn_reportes.isHidden())
             ventana.btn_ventas.click()
-            self.assertEqual([r['idVenta'] for r in ventana.pagina_ventas.registros], [propia])
-            self.assertTrue(ventana.pagina_ventas.btn_nueva.isHidden())
-            self.assertFalse(ventana.pagina_ventas.btn_nueva.isEnabled())
+            ventas = ventana.pagina_ventas
+            self.assertEqual(ventas.registros, [])
+            self.assertFalse(ventas.btn_nueva.isHidden())
+            self.assertTrue(ventas.btn_nueva.isEnabled())
+
+            def registrar_venta(form):
+                form.resultados.selectRow(0)
+                form.agregar()
+                form.btn_guardar.click()
+
+            with patch('ventas.confirmar', return_value=True), patch.object(QMessageBox, 'information'):
+                self.modal(ventas, 'Registrar venta', registrar_venta)
+            self.assertEqual(len(ventas.registros), 1)
+            propia = ventas.registros[0]['idVenta']
+            self.assertEqual(ventas.registros[0]['idUsuario'], cuenta['idUsuario'])
+            self.assertEqual(len(servicios.listar_ventas(self.admin)), 2)
+            self.assertEqual(self.sql('SELECT cantidad FROM medicamentos', filas=True)[0]['cantidad'], 9)
             ventana.btn_reportes.click()
             pagina = ventana.pagina_reportes
             self.assertIs(ventana.paginas.currentWidget(), pagina)
@@ -289,11 +301,10 @@ class Auditorias(unittest.TestCase):
             error.assert_not_called()
             self.aviso.assert_not_called()
 
-    def test_interfaz_empleado_bloquea_acciones_de_escritura(self):
+    def test_interfaz_empleado_restringe_medicamentos_inventario_y_empleados(self):
         from PyQt6.QtWidgets import QDialog
         from principal import Principal
         from empleados import DialogoEmpleado
-        from ventas import DialogoVenta
 
         self.interfaz()
         with patch('mapa.conectar', self.conectar_pruebas), \
@@ -320,15 +331,12 @@ class Auditorias(unittest.TestCase):
             self.assertTrue(inventario.panel_movimiento.isHidden())
             self.assertFalse(inventario.btn_registrar.isEnabled())
             inventario.registrar_movimiento()
-            ventana.pagina_ventas.nueva()
             ventana.pagina_empleados.nuevo()
             with self.assertRaisesRegex(ValueError, 'administrador'):
                 DialogoEmpleado(self.empleado)
-            with self.assertRaisesRegex(ValueError, 'administrador'):
-                DialogoVenta(self.empleado)
             modal.assert_not_called()
             confirmacion.assert_not_called()
-            self.assertEqual(self.aviso.call_count, 5)
+            self.assertEqual(self.aviso.call_count, 4)
             self.assertEqual(self.fallos, [])
 
     def test_medicamentos_valida_rol_vigente_en_cada_escritura(self):
