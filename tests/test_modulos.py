@@ -105,7 +105,7 @@ class IntegracionTests(unittest.TestCase):
         return dict(idMedicamento=self.producto, cantidad=cantidad, precioUnitario=Decimal('10.15'))
 
     def test_venta_detalle_inventario_y_filtros(self):
-        vid, total, alertas = servicios.registrar_venta(self.empleado, [self.linea(7)], 'TARJETA')
+        vid, total, alertas = servicios.registrar_venta(self.admin, [self.linea(7)], 'TARJETA')
         self.assertEqual(total, Decimal('71.05'))
         self.assertEqual(len(alertas), 1)
         venta, detalle = servicios.consultar_venta(self.admin, vid)
@@ -114,7 +114,7 @@ class IntegracionTests(unittest.TestCase):
         self.assertEqual(self.sql('SELECT cantidad FROM medicamentos', filas=True)[0]['cantidad'], 3)
         mov = self.sql('SELECT * FROM movimientos_inventario', filas=True)[0]
         self.assertEqual((mov['idVenta'],mov['cantidadAnterior'],mov['cantidadNueva']), (vid,10,3))
-        self.assertEqual(len(servicios.listar_ventas(self.empleado, str(vid))), 1)
+        self.assertEqual(len(servicios.listar_ventas(self.admin, str(vid))), 1)
         self.assertEqual(servicios.listar_ventas(self.admin, desde=date(2000,1,1), hasta=date(2000,1,2)), [])
 
     def test_ventas_invalidas_no_escriben(self):
@@ -123,19 +123,19 @@ class IntegracionTests(unittest.TestCase):
                 ([self.linea(),self.linea()],'EFECTIVO'),
                 ([{**self.linea(),'precioUnitario':Decimal('9.00')}],'EFECTIVO')]:
             with self.assertRaises(ValueError):
-                servicios.registrar_venta(self.empleado, lineas, metodo)
+                servicios.registrar_venta(self.admin, lineas, metodo)
         self.assertEqual(self.sql('SELECT * FROM ventas', filas=True), [])
         self.assertEqual(self.sql('SELECT cantidad FROM medicamentos', filas=True)[0]['cantidad'], 10)
         self.sql('UPDATE medicamentos SET activo=0')
         with self.assertRaises(ValueError):
-            servicios.registrar_venta(self.empleado,[self.linea()],'EFECTIVO')
+            servicios.registrar_venta(self.admin,[self.linea()],'EFECTIVO')
 
     def test_rollback_si_falla_movimiento(self):
         self.sql("""CREATE TRIGGER fallo_prueba BEFORE INSERT ON movimientos_inventario
                     FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Fallo simulado'""")
         try:
             with self.assertRaises(ValueError):
-                servicios.registrar_venta(self.empleado,[self.linea()],'EFECTIVO')
+                servicios.registrar_venta(self.admin,[self.linea()],'EFECTIVO')
             self.assertEqual(self.sql('SELECT * FROM ventas', filas=True), [])
             self.assertEqual(self.sql('SELECT * FROM detalle_venta', filas=True), [])
             self.assertEqual(self.sql('SELECT cantidad FROM medicamentos', filas=True)[0]['cantidad'], 10)
@@ -143,6 +143,7 @@ class IntegracionTests(unittest.TestCase):
             self.sql('DROP TRIGGER fallo_prueba')
 
     def test_ventas_simultaneas_no_sobrevenden(self):
+        self.sql("UPDATE usuarios SET rol='ADMIN' WHERE idUsuario=%s", (self.empleado['idUsuario'],))
         def vender(usuario):
             try:
                 servicios.registrar_venta(usuario, [self.linea(7)], 'EFECTIVO')
@@ -167,7 +168,9 @@ class IntegracionTests(unittest.TestCase):
         cuenta = {'idUsuario':registro['idUsuario']}
         with self.assertRaises(ValueError): servicios.listar_ventas(cuenta)
         servicios.cambiar_empleado(self.admin, eid, 'reactivar')
-        vid, _, _ = servicios.registrar_venta(cuenta,[self.linea()],'TRANSFERENCIA')
+        self.assertEqual(servicios.listar_ventas(cuenta), [])
+        vid = self.sql("INSERT INTO ventas (idUsuario,metodoPago,subtotal,total) VALUES (%s,'TRANSFERENCIA',20.30,20.30)",
+                       (cuenta['idUsuario'],))
         servicios.cambiar_empleado(self.admin,eid,'eliminar')
         with self.assertRaises(ValueError): servicios.consultar_empleado(self.admin,eid)
         self.assertEqual(servicios.consultar_venta(self.admin,vid)[0]['idUsuario'],registro['idUsuario'])
@@ -175,7 +178,7 @@ class IntegracionTests(unittest.TestCase):
 
     def test_permisos_y_cuenta_propia(self):
         with self.assertRaises(ValueError): servicios.listar_empleados(self.empleado)
-        with self.assertRaises(ValueError): servicios.guardar_empleado(self.empleado,self.datos)
+        with self.assertRaises(ValueError): servicios.guardar_empleado(self.empleado,self.datos,self.cuenta)
         vid, _, _ = servicios.registrar_venta(self.admin,[self.linea()],'EFECTIVO')
         self.assertEqual(servicios.listar_ventas(self.empleado), [])
         with self.assertRaises(ValueError): servicios.consultar_venta(self.empleado,vid)
@@ -185,7 +188,7 @@ class IntegracionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             servicios.guardar_empleado(self.admin,self.datos,{**self.cuenta,'usuario':'admin'},eid)
         self.sql('UPDATE usuarios SET activo=0 WHERE idUsuario=%s',(self.empleado['idUsuario'],))
-        with self.assertRaises(ValueError): servicios.registrar_venta(self.empleado,[self.linea()],'EFECTIVO')
+        with self.assertRaises(ValueError): servicios.listar_ventas(self.empleado)
 
     def test_duplicados_y_validaciones(self):
         servicios.guardar_empleado(self.admin,self.datos,self.cuenta)
@@ -193,6 +196,97 @@ class IntegracionTests(unittest.TestCase):
                               ({**self.datos,'nombre':''},None),({**self.datos,'fechaNacimiento':date(2999,1,1)},None)]:
             with self.assertRaises(ValueError): servicios.guardar_empleado(self.admin,datos,cuenta)
         self.assertEqual(len(servicios.listar_empleados(self.admin)),1)
+
+    def test_cuenta_obligatoria_y_empleado_existente_sin_cuenta(self):
+        for cuenta in (None, {**self.cuenta, 'usuario': ''},
+                       {**self.cuenta, 'rol': 'OTRO'}, {**self.cuenta, 'contrasena': ''}):
+            with self.subTest(cuenta=cuenta):
+                with self.assertRaises(ValueError):
+                    servicios.guardar_empleado(self.admin, self.datos, cuenta)
+        self.assertEqual(servicios.listar_empleados(self.admin), [])
+        self.assertEqual(len(self.sql('SELECT * FROM usuarios', filas=True)), 2)
+
+        eid = self.sql("INSERT INTO empleados (nombre) VALUES ('Expediente existente')")
+        servicios.guardar_empleado(self.admin, self.datos, self.cuenta, eid)
+        registro = servicios.consultar_empleado(self.admin, eid)
+        self.assertEqual((registro['usuario'], registro['rol']), ('nuevo', 'EMPLEADO'))
+        uid = registro['idUsuario']
+        clave = self.sql('SELECT contrasena FROM usuarios WHERE idUsuario=%s', (uid,), True)[0]['contrasena']
+        servicios.guardar_empleado(self.admin, self.datos, {**self.cuenta, 'contrasena': ''}, eid)
+        self.assertEqual(self.sql('SELECT contrasena FROM usuarios WHERE idUsuario=%s', (uid,), True)[0]['contrasena'], clave)
+        servicios.guardar_empleado(self.admin, self.datos,
+                                  {**self.cuenta, 'rol': 'ADMIN', 'contrasena': 'nueva-clave'}, eid)
+        actual = self.sql('SELECT rol, contrasena FROM usuarios WHERE idUsuario=%s', (uid,), True)[0]
+        self.assertEqual(actual['rol'], 'ADMIN')
+        self.assertTrue(verificar_contrasena('nueva-clave', actual['contrasena']))
+        self.assertFalse(verificar_contrasena(self.cuenta['contrasena'], actual['contrasena']))
+
+    def test_empleado_consulta_solo_sus_ventas_y_reportes(self):
+        from reportes import generar_reporte, vendedores
+
+        ajena, _, _ = servicios.registrar_venta(self.admin, [self.linea()], 'EFECTIVO')
+        propia = self.sql("""INSERT INTO ventas (idUsuario,metodoPago,subtotal,total)
+                             VALUES (%s,'TARJETA',10.15,10.15)""", (self.empleado['idUsuario'],))
+        self.sql("""INSERT INTO detalle_venta (idVenta,idMedicamento,cantidad,precioUnitario,subtotal)
+                    VALUES (%s,%s,1,10.15,10.15)""", (propia, self.producto))
+        for sesion in (self.empleado, {**self.empleado, 'rol': 'ADMIN'}):
+            with self.subTest(sesion=sesion):
+                self.assertEqual([v['idVenta'] for v in servicios.listar_ventas(sesion)], [propia])
+                self.assertEqual(servicios.listar_ventas(sesion, 'Admin'), [])
+                venta, detalle = servicios.consultar_venta(sesion, propia)
+                self.assertEqual(venta['idUsuario'], self.empleado['idUsuario'])
+                self.assertEqual(detalle[0]['idMedicamento'], self.producto)
+                with self.assertRaises(ValueError):
+                    servicios.consultar_venta(sesion, ajena)
+                self.assertEqual([u['idUsuario'] for u in vendedores(sesion)], [self.empleado['idUsuario']])
+                for vendedor in (None, self.empleado['idUsuario']):
+                    _, filas = generar_reporte(sesion, 'Ventas', date.today(), date.today(), vendedor)
+                    self.assertEqual([fila[0] for fila in filas], [propia])
+                    _, filas = generar_reporte(sesion, 'Ventas por usuario', date.today(), date.today(), vendedor)
+                    self.assertEqual(filas, [[self.empleado['idUsuario'], 'Empleado', 1, Decimal('10.15'), Decimal('10.15')]])
+                for tipo in ('Ventas', 'Ventas por usuario'):
+                    with self.assertRaisesRegex(ValueError, 'propias ventas'):
+                        generar_reporte(sesion, tipo, date.today(), date.today(), self.admin['idUsuario'])
+                for tipo in ('Inventario', 'Empleados'):
+                    with self.assertRaisesRegex(ValueError, 'propias ventas'):
+                        generar_reporte(sesion, tipo, date.today(), date.today())
+        self.sql('UPDATE usuarios SET activo=0 WHERE idUsuario=%s', (self.empleado['idUsuario'],))
+        with self.assertRaises(ValueError):
+            generar_reporte(self.empleado, 'Ventas', date.today(), date.today())
+
+    def test_empleado_no_modifica_ventas_inventario_ni_empleados(self):
+        eid = servicios.guardar_empleado(self.admin, self.datos, self.cuenta)
+        tablas = ('usuarios', 'empleados', 'ventas', 'detalle_venta', 'medicamentos', 'movimientos_inventario')
+        anterior = {tabla: self.sql('SELECT * FROM ' + tabla, filas=True) for tabla in tablas}
+        for sesion in (self.empleado, {**self.empleado, 'rol': 'ADMIN'}):
+            with self.subTest(sesion=sesion):
+                with self.assertRaisesRegex(ValueError, 'administrador'):
+                    servicios.registrar_venta(sesion, [self.linea()], 'EFECTIVO')
+                for tipo in ('ENTRADA', 'AJUSTE', 'DEVOLUCION'):
+                    with self.assertRaisesRegex(ValueError, 'administrador'):
+                        servicios.movimiento_manual(sesion, self.producto, tipo, 1, 'Prueba', 10)
+                with self.assertRaisesRegex(ValueError, 'administrador'):
+                    servicios.guardar_empleado(sesion, self.datos, self.cuenta)
+                with self.assertRaisesRegex(ValueError, 'administrador'):
+                    servicios.guardar_empleado(sesion, self.datos, self.cuenta, eid)
+                for accion in ('eliminar', 'desactivar', 'reactivar'):
+                    with self.assertRaisesRegex(ValueError, 'administrador'):
+                        servicios.cambiar_empleado(sesion, eid, accion)
+        for tabla in tablas:
+            self.assertEqual(self.sql('SELECT * FROM ' + tabla, filas=True), anterior[tabla])
+
+    def test_revocar_rol_restringe_sesion_abierta(self):
+        from reportes import generar_reporte
+
+        self.sql("UPDATE usuarios SET rol='EMPLEADO' WHERE idUsuario=%s", (self.admin['idUsuario'],))
+        with self.assertRaisesRegex(ValueError, 'administrador'):
+            servicios.registrar_venta(self.admin, [self.linea()], 'EFECTIVO')
+        with self.assertRaisesRegex(ValueError, 'administrador'):
+            servicios.movimiento_manual(self.admin, self.producto, 'ENTRADA', 1, '', 10)
+        with self.assertRaisesRegex(ValueError, 'administrador'):
+            servicios.guardar_empleado(self.admin, self.datos, self.cuenta)
+        with self.assertRaisesRegex(ValueError, 'propias ventas'):
+            generar_reporte(self.admin, 'Inventario', date.today(), date.today())
 
     def test_interfaz_y_login(self):
         os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
@@ -214,13 +308,12 @@ class IntegracionTests(unittest.TestCase):
             for clave,campo in form.campos.items(): campo.setText(self.datos[clave])
             from PyQt6.QtCore import QDate
             form.fecha.setDate(QDate(1995,1,2))
-            form.con_cuenta.setChecked(True)
             form.nombre_usuario.setText('nuevo')
             form.clave.setText('clave-segura'); form.repetir.setText('clave-segura')
             form.guardar()
             self.assertEqual(form.result(), QDialog.DialogCode.Accepted)
             empleados.recargar(); self.assertEqual(empleados.tabla.rowCount(),1)
-            dialogo = DialogoVenta(self.empleado)
+            dialogo = DialogoVenta(self.admin)
             dialogo.resultados.selectRow(0); dialogo.agregar()
             dialogo.guardar()
             self.assertEqual(dialogo.result(), QDialog.DialogCode.Accepted)
@@ -245,7 +338,7 @@ class IntegracionTests(unittest.TestCase):
                 principal_empleado = Principal(self.empleado)
                 self.assertTrue(principal_empleado.btn_empleados.isHidden())
                 principal_empleado.abrir_ventas()
-                self.assertEqual(principal_empleado.pagina_ventas.tabla.rowCount(),1)
+                self.assertEqual(principal_empleado.pagina_ventas.tabla.rowCount(),0)
                 principal.pagina_buscar.detener_parpadeo()
                 principal_empleado.pagina_buscar.detener_parpadeo()
                 principal.close(); principal_empleado.close()
@@ -305,7 +398,6 @@ class IntegracionTests(unittest.TestCase):
                 for clave, campo in form.campos.items():
                     campo.setText(self.datos[clave])
                 form.fecha.setDate(QDate(1995,1,2))
-                form.con_cuenta.setChecked(True)
                 form.nombre_usuario.setText('nuevo')
                 form.clave.setText('clave-segura')
                 form.repetir.setText('clave-segura')

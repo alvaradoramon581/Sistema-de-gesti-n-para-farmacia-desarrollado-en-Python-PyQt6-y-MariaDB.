@@ -37,13 +37,15 @@ def transaccion():
 
 def autorizar(cursor, usuario, administrador=False, bloquear=False):
     # Consultar el rol vigente: una sesión abierta no conserva permisos revocados.
+    if not usuario or not usuario.get('idUsuario'):
+        raise ValueError('Inicie sesión para realizar esta operación.')
     cursor.execute('SELECT idUsuario, rol, activo FROM usuarios WHERE idUsuario=%s'
                    + (' FOR UPDATE' if bloquear else ''), (usuario['idUsuario'],))
     actual = cursor.fetchone()
     if not actual or not actual['activo'] or actual['rol'] not in ('ADMIN', 'EMPLEADO'):
         raise ValueError('La cuenta está inactiva. Inicie sesión nuevamente.')
     if administrador and actual['rol'] != 'ADMIN':
-        raise ValueError('Solo el administrador puede gestionar empleados.')
+        raise ValueError('Solo el administrador puede realizar esta operación.')
     return actual
 
 
@@ -74,7 +76,7 @@ def registrar_venta(usuario, lineas, metodo):
             raise ValueError('Hay productos repetidos en la venta.')
         ids.add(linea['idMedicamento'])
     with transaccion() as cur:
-        autorizar(cur, usuario, bloquear=True)
+        autorizar(cur, usuario, administrador=True, bloquear=True)
         total = Decimal('0.00')
         productos = []
         # Orden fijo y bloqueo de filas para evitar sobreventa entre dos cajas.
@@ -221,14 +223,15 @@ def proteger_cuenta(cur, usuario, id_usuario, rol, activo):
 
 def guardar_empleado(usuario, datos, cuenta=None, id_empleado=None):
     datos = validar_empleado(datos)
+    if cuenta is None:
+        raise ValueError('Indique el usuario, rol y contraseña de acceso del empleado.')
     clave_hash = None
-    if cuenta is not None:
-        if not re.fullmatch(r'[\w.@-]{3,50}', cuenta.get('usuario', '')):
-            raise ValueError('El usuario debe tener de 3 a 50 letras, números o caracteres . @ - _.')
-        if cuenta.get('rol') not in ('ADMIN', 'EMPLEADO'):
-            raise ValueError('Seleccione un rol válido.')
-        if cuenta.get('contrasena'):
-            clave_hash = cifrar_contrasena(cuenta['contrasena'])
+    if not re.fullmatch(r'[\w.@-]{3,50}', cuenta.get('usuario', '')):
+        raise ValueError('El usuario debe tener de 3 a 50 letras, números o caracteres . @ - _.')
+    if cuenta.get('rol') not in ('ADMIN', 'EMPLEADO'):
+        raise ValueError('Seleccione un rol válido.')
+    if cuenta.get('contrasena'):
+        clave_hash = cifrar_contrasena(cuenta['contrasena'])
     with transaccion() as cur:
         bloquear_administracion(cur, usuario)
         anterior = None
@@ -243,23 +246,20 @@ def guardar_empleado(usuario, datos, cuenta=None, id_empleado=None):
             raise ValueError('Ya existe un empleado con ese RFC.')
         id_usuario = anterior['idUsuario'] if anterior else None
         activo = anterior['activo'] if anterior else 1
-        if id_usuario and cuenta is None:
-            raise ValueError('Conserve los datos de la cuenta vinculada al empleado.')
-        if cuenta is not None:
-            if id_usuario:
-                proteger_cuenta(cur, usuario, id_usuario, cuenta['rol'], activo)
-                cur.execute('''UPDATE usuarios SET nombre=%s, usuario=%s, rol=%s
-                               WHERE idUsuario=%s''',
-                            (datos['nombre'], cuenta['usuario'], cuenta['rol'], id_usuario))
-                if clave_hash:
-                    cur.execute('UPDATE usuarios SET contrasena=%s WHERE idUsuario=%s', (clave_hash, id_usuario))
-            else:
-                if not clave_hash:
-                    raise ValueError('Ingrese una contraseña para la nueva cuenta.')
-                cur.execute('''INSERT INTO usuarios (nombre,usuario,contrasena,rol,activo)
-                               VALUES (%s,%s,%s,%s,%s)''',
-                            (datos['nombre'], cuenta['usuario'], clave_hash, cuenta['rol'], activo))
-                id_usuario = cur.lastrowid
+        if id_usuario:
+            proteger_cuenta(cur, usuario, id_usuario, cuenta['rol'], activo)
+            cur.execute('''UPDATE usuarios SET nombre=%s, usuario=%s, rol=%s
+                           WHERE idUsuario=%s''',
+                        (datos['nombre'], cuenta['usuario'], cuenta['rol'], id_usuario))
+            if clave_hash:
+                cur.execute('UPDATE usuarios SET contrasena=%s WHERE idUsuario=%s', (clave_hash, id_usuario))
+        else:
+            if not clave_hash:
+                raise ValueError('Ingrese una contraseña para la nueva cuenta.')
+            cur.execute('''INSERT INTO usuarios (nombre,usuario,contrasena,rol,activo)
+                           VALUES (%s,%s,%s,%s,%s)''',
+                        (datos['nombre'], cuenta['usuario'], clave_hash, cuenta['rol'], activo))
+            id_usuario = cur.lastrowid
         valores = (datos['nombre'], datos['fechaNacimiento'], datos['rfc'], datos['direccion'],
                    datos['telefono'], datos['identificacion'], id_usuario)
         if anterior:
@@ -304,7 +304,7 @@ def movimiento_manual(usuario, medicamento, tipo, cantidad, descripcion, esperad
     if len(descripcion) > 255 or (tipo != 'ENTRADA' and not descripcion.strip()):
         raise ValueError('Indique el motivo (máximo 255 caracteres).')
     with transaccion() as cur:
-        autorizar(cur, usuario, bloquear=True)
+        autorizar(cur, usuario, administrador=True, bloquear=True)
         cur.execute('SELECT cantidad, activo FROM medicamentos WHERE idMedicamento=%s FOR UPDATE', (medicamento,))
         producto = cur.fetchone()
         if not producto or not producto['activo']:

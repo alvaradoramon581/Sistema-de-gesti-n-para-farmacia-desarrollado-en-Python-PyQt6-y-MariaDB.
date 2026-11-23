@@ -12,6 +12,8 @@ from ui_comun import (titulo, boton, tabla, llenar_tabla, confirmar, manejar_err
 class DialogoVenta(QDialog):
     def __init__(self, usuario, parent=None):
         super().__init__(parent)
+        with servicios.transaccion() as cur:
+            servicios.autorizar(cur, usuario, administrador=True)
         self.usuario = usuario
         self.productos = []
         self.carrito = {}
@@ -215,7 +217,10 @@ class Ventas(QWidget):
         fechas.addStretch()
         layout.addWidget(tarjeta(filtros, fechas))
         acciones = QHBoxLayout()
-        acciones.addWidget(boton('Registrar venta', self.nueva))
+        self.btn_nueva = boton('Registrar venta', self.nueva)
+        self.btn_nueva.setVisible(self.usuario.get('rol') == 'ADMIN')
+        self.btn_nueva.setEnabled(self.usuario.get('rol') == 'ADMIN')
+        acciones.addWidget(self.btn_nueva)
         self.btn_consultar = boton('Consultar detalle', self.consultar, True)
         self.btn_consultar.setEnabled(False)
         acciones.addWidget(self.btn_consultar)
@@ -251,6 +256,7 @@ class Ventas(QWidget):
         total = sum((v['total'] for v in self.registros), Decimal('0.00'))
         self.resumen.setText(f'{len(self.registros)} venta(s) en la lista. Total: {dinero(total)}')
 
+    @manejar_errores
     def nueva(self, *_):
         if DialogoVenta(self.usuario, self).exec():
             self.recargar()

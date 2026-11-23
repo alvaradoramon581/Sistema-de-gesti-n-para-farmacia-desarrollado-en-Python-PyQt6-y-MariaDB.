@@ -319,6 +319,9 @@ class Inventario(QWidget):
         layout_principal.addWidget(self.tabla, 1)
         layout_botones.addStretch()
         layout_movimiento.addLayout(layout_botones, 4, 1, 1, 3)
+        self.panel_movimiento = frame_movimiento
+        self.panel_movimiento.setVisible(self.usuario.get('rol') == 'ADMIN')
+        self.panel_movimiento.setEnabled(self.usuario.get('rol') == 'ADMIN')
         layout_principal.addWidget(frame_movimiento)
 
     # =========================================================
@@ -566,7 +569,7 @@ class Inventario(QWidget):
 
 
         self.btn_registrar.setEnabled(
-            True
+            self.usuario.get('rol') == 'ADMIN'
         )
 
 
@@ -663,7 +666,13 @@ class Inventario(QWidget):
     # =========================================================
 
     def registrar_movimiento(self):
-        from servicios import movimiento_manual
+        from servicios import movimiento_manual, transaccion, autorizar
+        try:
+            with transaccion() as cur:
+                autorizar(cur, self.usuario, administrador=True)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Acceso denegado", str(exc))
+            return
         if self.id_medicamento_seleccionado is None:
             QMessageBox.warning(self, "Seleccione un medicamento", "Seleccione un medicamento de la tabla.")
             return

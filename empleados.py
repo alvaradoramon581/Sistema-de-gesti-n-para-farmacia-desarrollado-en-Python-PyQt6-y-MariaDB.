@@ -1,7 +1,7 @@
 """Lista de empleados y operaciones exclusivamente en ventanas modales."""
 from PyQt6.QtCore import QDate, QTimer
 from PyQt6.QtWidgets import (QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLineEdit, QComboBox, QLabel, QDateEdit, QCheckBox, QScrollArea)
+    QLineEdit, QComboBox, QLabel, QDateEdit, QScrollArea)
 from estilos import ESTILO_GENERAL, ESTILO_BOTON_PELIGRO
 import servicios
 from ui_comun import (titulo, boton, tabla, llenar_tabla, confirmar, manejar_errores,
@@ -11,6 +11,8 @@ from ui_comun import (titulo, boton, tabla, llenar_tabla, confirmar, manejar_err
 class DialogoEmpleado(QDialog):
     def __init__(self, usuario, empleado=None, consulta=False, parent=None):
         super().__init__(parent)
+        with servicios.transaccion() as cur:
+            servicios.autorizar(cur, usuario, administrador=True)
         self.usuario = usuario
         self.empleado = empleado or {}
         self.setWindowTitle('Consultar empleado' if consulta else ('Modificar empleado' if empleado else 'Registrar empleado'))
@@ -44,10 +46,7 @@ class DialogoEmpleado(QDialog):
         self.fecha.setDate(QDate(valor.year, valor.month, valor.day) if valor else QDate(1900,1,1))
         self.fecha.setEnabled(not consulta)
         form.insertRow(1, 'Fecha de nacimiento *', self.fecha)
-        self.con_cuenta = QCheckBox('Cuenta de acceso al sistema')
-        self.con_cuenta.setChecked(bool(self.empleado.get('idUsuario')))
-        self.con_cuenta.setEnabled(not consulta and not self.empleado.get('idUsuario'))
-        form.addRow(self.con_cuenta)
+        form.addRow(QLabel('Cuenta de acceso al sistema'))
         self.cuenta_panel = QWidget()
         cuenta_form = QFormLayout(self.cuenta_panel)
         cuenta_form.setContentsMargins(0,0,0,0)
@@ -64,13 +63,11 @@ class DialogoEmpleado(QDialog):
         self.repetir = QLineEdit()
         self.repetir.setEchoMode(QLineEdit.EchoMode.Password)
         cuenta_form.addRow('Usuario *', self.nombre_usuario)
-        cuenta_form.addRow('Rol', self.rol)
+        cuenta_form.addRow('Rol *', self.rol)
         if not consulta:
-            cuenta_form.addRow('Contraseña', self.clave)
+            cuenta_form.addRow('Contraseña' if self.empleado.get('idUsuario') else 'Contraseña *', self.clave)
             cuenta_form.addRow('Repetir contraseña', self.repetir)
         form.addRow(self.cuenta_panel)
-        self.cuenta_panel.setVisible(self.con_cuenta.isChecked())
-        self.con_cuenta.toggled.connect(self.cuenta_panel.setVisible)
         if empleado:
             form.addRow('Estado', QLabel('Activo' if empleado['activo'] else 'Inactivo'))
         scroll.setWidget(contenido)
@@ -89,12 +86,10 @@ class DialogoEmpleado(QDialog):
         if self.fecha.date() == self.fecha.minimumDate():
             raise ValueError('Seleccione la fecha de nacimiento.')
         datos['fechaNacimiento'] = self.fecha.date().toPyDate()
-        cuenta = None
-        if self.con_cuenta.isChecked():
-            if self.clave.text() != self.repetir.text():
-                raise ValueError('Las contraseñas no coinciden.')
-            cuenta = {'usuario': self.nombre_usuario.text().strip(), 'rol': self.rol.currentText(),
-                      'contrasena': self.clave.text()}
+        if self.clave.text() != self.repetir.text():
+            raise ValueError('Las contraseñas no coinciden.')
+        cuenta = {'usuario': self.nombre_usuario.text().strip(), 'rol': self.rol.currentText(),
+                  'contrasena': self.clave.text()}
         servicios.guardar_empleado(self.usuario, datos, cuenta, self.empleado.get('idEmpleado'))
         self.accept()
 
@@ -120,7 +115,8 @@ class Empleados(QWidget):
         filtros.addWidget(boton('Actualizar', self.recargar, True))
         layout.addWidget(tarjeta(filtros))
         acciones = QHBoxLayout()
-        acciones.addWidget(boton('Registrar empleado', self.nuevo))
+        self.btn_nuevo = boton('Registrar empleado', self.nuevo)
+        acciones.addWidget(self.btn_nuevo)
         self.btn_consultar = boton('Consultar', self.consultar, True)
         self.btn_editar = boton('Modificar', self.editar, True)
         self.btn_estado = boton('Desactivar', self.cambiar_estado, True)
@@ -129,6 +125,8 @@ class Empleados(QWidget):
         self.acciones = [self.btn_consultar, self.btn_editar, self.btn_estado, self.btn_eliminar]
         for widget in self.acciones:
             acciones.addWidget(widget)
+        for widget in [self.btn_nuevo, *self.acciones]:
+            widget.setVisible(self.usuario.get('rol') == 'ADMIN')
         acciones.addStretch()
         layout.addLayout(acciones)
         self.tabla = tabla(['ID', 'Nombre', 'RFC', 'Teléfono', 'Usuario', 'Rol', 'Estado'])
@@ -166,7 +164,7 @@ class Empleados(QWidget):
         return self.registros[fila]
 
     def seleccion(self):
-        valido = bool(self.tabla.selectedItems())
+        valido = self.usuario.get('rol') == 'ADMIN' and bool(self.tabla.selectedItems())
         for widget in self.acciones:
             widget.setEnabled(valido)
         if valido:

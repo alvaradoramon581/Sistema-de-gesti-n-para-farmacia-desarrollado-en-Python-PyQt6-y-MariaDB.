@@ -12,8 +12,11 @@ TIPOS=['Ventas','Ventas por usuario','Inventario','Empleados']
 
 def vendedores(usuario):
     with transaccion() as cur:
-        autorizar(cur,usuario,administrador=True)
-        cur.execute('SELECT idUsuario,nombre FROM usuarios ORDER BY nombre')
+        actual = autorizar(cur, usuario)
+        if actual['rol'] == 'ADMIN':
+            cur.execute('SELECT idUsuario,nombre FROM usuarios ORDER BY nombre')
+        else:
+            cur.execute('SELECT idUsuario,nombre FROM usuarios WHERE idUsuario=%s', (actual['idUsuario'],))
         return cur.fetchall()
 
 
@@ -21,7 +24,13 @@ def generar_reporte(usuario,tipo,desde,hasta,vendedor=None):
     if tipo not in TIPOS: raise ValueError('Seleccione un reporte válido.')
     if type(desde) is not date or type(hasta) is not date or desde>hasta: raise ValueError('Revise el rango de fechas.')
     with transaccion() as cur:
-        autorizar(cur,usuario,administrador=True)
+        actual = autorizar(cur, usuario)
+        if actual['rol'] != 'ADMIN':
+            if tipo not in ('Ventas', 'Ventas por usuario'):
+                raise ValueError('Solo puede generar reportes de sus propias ventas.')
+            if vendedor is not None and vendedor != actual['idUsuario']:
+                raise ValueError('Solo puede generar reportes de sus propias ventas.')
+            vendedor = actual['idUsuario']
         if tipo in ('Ventas','Ventas por usuario'):
             filtro='v.fecha >= %s AND v.fecha < DATE_ADD(%s,INTERVAL 1 DAY)'
             params=[desde,hasta]
@@ -67,9 +76,14 @@ class Reportes(Listado):
     def __init__(self,usuario):
         super().__init__(usuario,'Reportes',['Resultado'],'Seleccione un reporte y consulte o exporte sus resultados.')
         self.busqueda.hide()
-        self.tipo=QComboBox(); self.tipo.addItems(TIPOS)
+        self.tipo=QComboBox()
+        self.tipo.addItems(TIPOS if usuario.get('rol') == 'ADMIN' else ['Ventas', 'Ventas por usuario'])
         self.desde=QDateEdit(QDate.currentDate().addMonths(-1)); self.hasta=QDateEdit(QDate.currentDate())
-        self.vendedor=QComboBox(); self.vendedor.addItem('Todos los usuarios',None)
+        self.vendedor=QComboBox()
+        if usuario.get('rol') == 'ADMIN':
+            self.vendedor.addItem('Todos los usuarios', None)
+        else:
+            self.vendedor.addItem(usuario['nombre'], usuario['idUsuario'])
         for campo in [self.desde,self.hasta]: campo.setCalendarPopup(True); campo.setDisplayFormat('dd/MM/yyyy')
         self.filtros.insertWidget(0,self.tipo)
         self.filtros.insertWidget(1, QLabel('Usuario'))
@@ -94,15 +108,17 @@ class Reportes(Listado):
     def cambiar_tipo(self,*_):
         temporal=self.tipo.currentText() not in ('Empleados','Inventario')
         self.desde.setEnabled(temporal); self.hasta.setEnabled(temporal)
-        self.vendedor.setEnabled(self.tipo.currentText() in ('Ventas','Ventas por usuario'))
+        self.vendedor.setEnabled(self.usuario.get('rol') == 'ADMIN' and temporal)
         self.nota.setText('El rango incluye ambas fechas.' if temporal else 'Estado actual. Las fechas no se aplican a este reporte.')
         self.limpiar()
 
     @manejar_errores
     def preparar(self):
         self.vendedor.blockSignals(True)
-        self.vendedor.clear(); self.vendedor.addItem('Todos los usuarios',None)
+        self.vendedor.clear()
         try:
+            if self.usuario.get('rol') == 'ADMIN':
+                self.vendedor.addItem('Todos los usuarios', None)
             for u in vendedores(self.usuario): self.vendedor.addItem(u['nombre'],u['idUsuario'])
         finally: self.vendedor.blockSignals(False)
         self.recargar()

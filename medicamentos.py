@@ -24,19 +24,26 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate
 
 from conexion import conectar
-from ui_comun import tabla, encabezado, tarjeta, dimensionar_dialogo
+from servicios import autorizar, transaccion
+from ui_comun import tabla, encabezado, tarjeta, dimensionar_dialogo, manejar_errores
 from estilos import ESTILO_GENERAL, ESTILO_LABEL, ESTILO_BOTON_SECUNDARIO, ESTILO_BOTON_PELIGRO
 
 
 class Medicamentos(QWidget):
 
-    def __init__(self):
+    def __init__(self, usuario=None):
         super().__init__()
 
+        self.usuario = usuario or {}
         self.id_medicamento_seleccionado = None
         self.estado_medicamento_seleccionado = None
 
         self.crear_interfaz()
+        for boton in [self.btn_guardar, self.btn_modificar, self.btn_desactivar,
+                      self.btn_reactivar, self.btn_confirmar]:
+            boton.setVisible(self.usuario.get('rol') == 'ADMIN')
+        self.btn_guardar.setEnabled(self.usuario.get('rol') == 'ADMIN')
+        self.btn_confirmar.setEnabled(self.usuario.get('rol') == 'ADMIN')
         self.cargar_ubicaciones()
         self.cargar_medicamentos()
 
@@ -530,16 +537,23 @@ class Medicamentos(QWidget):
         item = self.tabla.item(fila, 0) if fila >= 0 and seleccion else None
         self.id_medicamento_seleccionado = item.data(Qt.ItemDataRole.UserRole) if item else None
         self.estado_medicamento_seleccionado = item.data(Qt.ItemDataRole.UserRole + 1) if item else None
-        self.btn_modificar.setEnabled(item is not None)
-        self.btn_desactivar.setEnabled(bool(item and self.estado_medicamento_seleccionado))
-        self.btn_reactivar.setEnabled(bool(item and not self.estado_medicamento_seleccionado))
+        editable = self.usuario.get('rol') == 'ADMIN' and item is not None
+        self.btn_modificar.setEnabled(editable)
+        self.btn_desactivar.setEnabled(editable and bool(self.estado_medicamento_seleccionado))
+        self.btn_reactivar.setEnabled(editable and not self.estado_medicamento_seleccionado)
 
-    def abrir_alta(self):
+    @manejar_errores
+    def abrir_alta(self, *_):
+        with transaccion() as cur:
+            autorizar(cur, self.usuario, administrador=True)
         self.limpiar_formulario()
         self.dialogo.setWindowTitle("Registrar medicamento")
         self.dialogo.exec()
 
+    @manejar_errores
     def abrir_edicion(self, *_):
+        with transaccion() as cur:
+            autorizar(cur, self.usuario, administrador=True)
         fila = self.tabla.currentRow()
         if fila >= 0 and self.tabla.selectedItems() and self.seleccionar_medicamento(fila, 0):
             self.dialogo.setWindowTitle("Modificar medicamento")
@@ -900,7 +914,9 @@ class Medicamentos(QWidget):
 
         try:
 
-            cursor = conexion.cursor()
+            conexion.start_transaction()
+            cursor = conexion.cursor(dictionary=True)
+            autorizar(cursor, self.usuario, administrador=True, bloquear=True)
 
 
             consulta = """
@@ -957,6 +973,10 @@ class Medicamentos(QWidget):
 
 
             return True
+
+        except ValueError as e:
+            conexion.rollback()
+            QMessageBox.warning(self, "Acceso denegado", str(e))
 
         except Exception as e:
 
@@ -1023,14 +1043,14 @@ class Medicamentos(QWidget):
         # =====================================================
 
         self.btn_modificar.setEnabled(
-            True
+            self.usuario.get('rol') == 'ADMIN'
         )
 
 
         if self.estado_medicamento_seleccionado:
 
             self.btn_desactivar.setEnabled(
-                True
+                self.usuario.get('rol') == 'ADMIN'
             )
 
             self.btn_reactivar.setEnabled(
@@ -1044,7 +1064,7 @@ class Medicamentos(QWidget):
             )
 
             self.btn_reactivar.setEnabled(
-                True
+                self.usuario.get('rol') == 'ADMIN'
             )
 
 
@@ -1217,7 +1237,9 @@ class Medicamentos(QWidget):
 
         try:
 
-            cursor = conexion.cursor()
+            conexion.start_transaction()
+            cursor = conexion.cursor(dictionary=True)
+            autorizar(cursor, self.usuario, administrador=True, bloquear=True)
 
 
             consulta = """
@@ -1274,6 +1296,10 @@ class Medicamentos(QWidget):
 
 
             return True
+
+        except ValueError as e:
+            conexion.rollback()
+            QMessageBox.warning(self, "Acceso denegado", str(e))
 
         except Exception as e:
 
@@ -1352,7 +1378,9 @@ class Medicamentos(QWidget):
 
         try:
 
-            cursor = conexion.cursor()
+            conexion.start_transaction()
+            cursor = conexion.cursor(dictionary=True)
+            autorizar(cursor, self.usuario, administrador=True, bloquear=True)
 
 
             consulta = """
@@ -1383,6 +1411,10 @@ class Medicamentos(QWidget):
 
             self.cargar_medicamentos()
 
+
+        except ValueError as e:
+            conexion.rollback()
+            QMessageBox.warning(self, "Acceso denegado", str(e))
 
         except Exception as e:
 
@@ -1461,7 +1493,9 @@ class Medicamentos(QWidget):
 
         try:
 
-            cursor = conexion.cursor()
+            conexion.start_transaction()
+            cursor = conexion.cursor(dictionary=True)
+            autorizar(cursor, self.usuario, administrador=True, bloquear=True)
 
 
             consulta = """
@@ -1492,6 +1526,10 @@ class Medicamentos(QWidget):
 
             self.cargar_medicamentos()
 
+
+        except ValueError as e:
+            conexion.rollback()
+            QMessageBox.warning(self, "Acceso denegado", str(e))
 
         except Exception as e:
 
