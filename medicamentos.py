@@ -240,6 +240,9 @@ class Medicamentos(QWidget):
             "Fabricante o laboratorio"
         )
 
+        self.txt_proveedor = QLineEdit()
+        self.txt_proveedor.setMaxLength(150)
+        self.txt_proveedor.setPlaceholderText("Nombre del proveedor")
 
         self.txt_contenido = QLineEdit()
 
@@ -350,6 +353,7 @@ class Medicamentos(QWidget):
             "Fabricante:",
             self.txt_fabricante
         )
+        layout_formulario.addRow("Proveedor", self.txt_proveedor)
 
         layout_formulario.addRow(
             "Contenido:",
@@ -483,7 +487,8 @@ class Medicamentos(QWidget):
             "Ubicación",
             "Estado",
             "Lote",
-            "Caducidad"
+            "Caducidad",
+            "Proveedor"
         ])
 
 
@@ -709,6 +714,7 @@ class Medicamentos(QWidget):
                     m.codigoBarras,
                     m.principioActivo,
                     m.fabricante,
+                    m.proveedor,
                     m.precioVenta,
                     m.stockMinimo,
                     m.lote,
@@ -853,7 +859,8 @@ class Medicamentos(QWidget):
                     registro["ubicacion"],
                     estado_texto,
                     registro["lote"],
-                    registro["fechaCaducidad"]
+                    registro["fechaCaducidad"],
+                    registro["proveedor"]
                 ]
 
 
@@ -936,6 +943,7 @@ class Medicamentos(QWidget):
                     idUbicacion,
                     lote,
                     fechaCaducidad,
+                    proveedor,
                     activo
                 )
                 VALUES
@@ -943,7 +951,7 @@ class Medicamentos(QWidget):
                     %s, %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s, %s,
-                    %s, %s,
+                    %s, %s, %s,
                     TRUE
                 )
             """
@@ -1138,6 +1146,7 @@ class Medicamentos(QWidget):
             self.txt_fabricante.setText(
                 medicamento["fabricante"] or ""
             )
+            self.txt_proveedor.setText(medicamento["proveedor"] or "")
 
             self.txt_contenido.setText(
                 medicamento["contenido"] or ""
@@ -1258,7 +1267,8 @@ class Medicamentos(QWidget):
                     stockMinimo = %s,
                     idUbicacion = %s,
                     lote = %s,
-                    fechaCaducidad = %s
+                    fechaCaducidad = %s,
+                    proveedor = %s
 
                 WHERE idMedicamento = %s
             """
@@ -1661,7 +1671,8 @@ class Medicamentos(QWidget):
             self.spn_stock_minimo.value(),
             id_ubicacion,
             self.txt_lote.text().strip() or None,
-            None if self.sin_caducidad.isChecked() else self.fecha_caducidad.date().toPyDate()
+            None if self.sin_caducidad.isChecked() else self.fecha_caducidad.date().toPyDate(),
+            self.txt_proveedor.text().strip() or None
         )
 
 
@@ -1696,6 +1707,7 @@ class Medicamentos(QWidget):
         self.txt_principio.clear()
 
         self.txt_fabricante.clear()
+        self.txt_proveedor.clear()
 
         self.txt_contenido.clear()
 

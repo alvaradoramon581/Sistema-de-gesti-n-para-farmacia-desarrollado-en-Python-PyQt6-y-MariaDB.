@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 import re
 
 from mysql.connector import Error, IntegrityError
@@ -156,8 +157,9 @@ def consultar_venta(usuario, id_venta):
         return venta, cur.fetchall()
 
 
-EMPLEADO_SELECT = '''SELECT e.*, u.usuario, u.rol FROM empleados e
-                    LEFT JOIN usuarios u ON u.idUsuario=e.idUsuario'''
+EMPLEADO_SELECT = '''SELECT e.*, u.usuario, u.rol, d.nombre AS documentoNombre FROM empleados e
+                    LEFT JOIN usuarios u ON u.idUsuario=e.idUsuario
+                    LEFT JOIN empleado_documento d ON d.idEmpleado=e.idEmpleado'''
 
 
 def listar_empleados(usuario, texto='', estado=None):
@@ -188,7 +190,7 @@ def validar_empleado(datos):
     for clave, limite in [('nombre',100), ('rfc',13), ('direccion',200),
                           ('telefono',20), ('identificacion',100)]:
         valor = datos.get(clave, '').strip()
-        if not valor or len(valor) > limite:
+        if (not valor and clave != 'identificacion') or len(valor) > limite:
             raise ValueError(f'Complete {clave} (máximo {limite} caracteres).')
         resultado[clave] = valor
     nacimiento = datos.get('fechaNacimiento')
@@ -221,8 +223,39 @@ def proteger_cuenta(cur, usuario, id_usuario, rol, activo):
             raise ValueError('Debe conservar al menos un administrador activo.')
 
 
-def guardar_empleado(usuario, datos, cuenta=None, id_empleado=None):
+def validar_documento_identidad(documento):
+    nombre = documento.get('nombre', '')
+    contenido = documento.get('contenido')
+    if not nombre or Path(nombre).name != nombre or len(nombre) > 255:
+        raise ValueError('El nombre del documento no es válido.')
+    if not isinstance(contenido, bytes) or not contenido:
+        raise ValueError('Seleccione un archivo con contenido.')
+    extension = Path(nombre).suffix.lower()
+    if extension == '.pdf':
+        if not contenido.startswith(b'%PDF-'):
+            raise ValueError('El archivo seleccionado no tiene formato PDF.')
+    elif extension in ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.webp', '.tif', '.tiff'):
+        from PyQt6.QtGui import QImage
+        if QImage.fromData(contenido, extension[1:].encode('ascii')).isNull():
+            raise ValueError('No se pudo leer la imagen seleccionada.')
+    else:
+        raise ValueError('Seleccione un PDF o una imagen PNG, JPG, BMP, GIF, WEBP o TIFF.')
+
+
+def consultar_documento_empleado(usuario, id_empleado):
+    with transaccion() as cur:
+        autorizar(cur, usuario, administrador=True)
+        cur.execute('SELECT nombre, contenido FROM empleado_documento WHERE idEmpleado=%s', (id_empleado,))
+        documento = cur.fetchone()
+        if not documento:
+            raise ValueError('El empleado no tiene un archivo de identificación guardado.')
+        return documento
+
+
+def guardar_empleado(usuario, datos, cuenta=None, id_empleado=None, documento=None):
     datos = validar_empleado(datos)
+    if documento is not None:
+        validar_documento_identidad(documento)
     if cuenta is None:
         raise ValueError('Indique el usuario, rol y contraseña de acceso del empleado.')
     clave_hash = None
@@ -240,6 +273,14 @@ def guardar_empleado(usuario, datos, cuenta=None, id_empleado=None):
             anterior = cur.fetchone()
             if not anterior:
                 raise ValueError('El empleado ya no existe. Actualice la lista.')
+        if not datos['identificacion'] and documento is None:
+            cur.execute('SELECT idEmpleado FROM empleado_documento WHERE idEmpleado=%s', (id_empleado,))
+            if not cur.fetchone():
+                raise ValueError('Indique el folio de identificación o adjunte un PDF o imagen.')
+        if documento is not None:
+            cur.execute('SELECT @@max_allowed_packet AS limite')
+            if len(documento['contenido']) + 1024 > cur.fetchone()['limite']:
+                raise ValueError('El archivo supera el tamaño permitido por la conexión a la base de datos.')
         cur.execute('SELECT idEmpleado FROM empleados WHERE rfc=%s AND idEmpleado<>%s',
                     (datos['rfc'], id_empleado or 0))
         if cur.fetchone():
@@ -271,6 +312,10 @@ def guardar_empleado(usuario, datos, cuenta=None, id_empleado=None):
                 (nombre,fechaNacimiento,rfc,direccion,telefono,identificacion,idUsuario)
                 VALUES (%s,%s,%s,%s,%s,%s,%s)''', valores)
             id_empleado = cur.lastrowid
+        if documento is not None:
+            cur.execute('''INSERT INTO empleado_documento (idEmpleado, nombre, contenido) VALUES (%s,%s,%s)
+                           ON DUPLICATE KEY UPDATE nombre=VALUES(nombre), contenido=VALUES(contenido)''',
+                        (id_empleado, documento['nombre'], documento['contenido']))
         return id_empleado
 
 
@@ -296,13 +341,16 @@ def cambiar_empleado(usuario, id_empleado, accion):
             cur.execute('UPDATE empleados SET activo=%s WHERE idEmpleado=%s', (activo, id_empleado))
 
 
-def movimiento_manual(usuario, medicamento, tipo, cantidad, descripcion, esperada):
+def movimiento_manual(usuario, medicamento, tipo, cantidad, descripcion, esperada, proveedor=None):
     if tipo not in ('ENTRADA', 'DEVOLUCION', 'AJUSTE') or type(cantidad) is not int or cantidad < 0:
         raise ValueError('Movimiento inválido.')
     if cantidad == 0 and tipo != 'AJUSTE':
         raise ValueError('Indique una cantidad mayor que cero.')
     if len(descripcion) > 255 or (tipo != 'ENTRADA' and not descripcion.strip()):
         raise ValueError('Indique el motivo (máximo 255 caracteres).')
+    if proveedor is not None:
+        if tipo != 'ENTRADA' or not isinstance(proveedor, str) or len(proveedor.strip()) > 150:
+            raise ValueError('El proveedor se captura en las entradas y admite hasta 150 caracteres.')
     with transaccion() as cur:
         autorizar(cur, usuario, administrador=True, bloquear=True)
         cur.execute('SELECT cantidad, activo FROM medicamentos WHERE idMedicamento=%s FOR UPDATE', (medicamento,))
@@ -324,6 +372,9 @@ def movimiento_manual(usuario, medicamento, tipo, cantidad, descripcion, esperad
         if diferencia == 0:
             raise ValueError('La existencia no cambia.')
         cur.execute('UPDATE medicamentos SET cantidad=%s WHERE idMedicamento=%s', (nueva, medicamento))
+        if proveedor is not None:
+            cur.execute('UPDATE medicamentos SET proveedor=%s WHERE idMedicamento=%s',
+                        (proveedor.strip() or None, medicamento))
         cur.execute('''INSERT INTO movimientos_inventario
             (idMedicamento,idUsuario,tipo,cantidad,cantidadAnterior,cantidadNueva,descripcion)
             VALUES (%s,%s,%s,%s,%s,%s,%s)''',

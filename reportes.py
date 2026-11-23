@@ -6,8 +6,10 @@ from PyQt6.QtWidgets import QComboBox,QDateEdit,QLabel,QFileDialog,QMessageBox,Q
 from listados import Listado
 from ui_comun import boton,manejar_errores
 from servicios import transaccion,autorizar
+from encuestas import CALIFICACIONES, folio_encuesta
 
-TIPOS=['Ventas','Ventas por usuario','Inventario','Empleados']
+TIPOS=['Ventas','Ventas por usuario','Encuestas','Inventario','Empleados']
+TIPOS_PERSONALES = ['Ventas', 'Ventas por usuario', 'Encuestas']
 
 
 def vendedores(usuario):
@@ -26,10 +28,10 @@ def generar_reporte(usuario,tipo,desde,hasta,vendedor=None):
     with transaccion() as cur:
         actual = autorizar(cur, usuario)
         if actual['rol'] != 'ADMIN':
-            if tipo not in ('Ventas', 'Ventas por usuario'):
-                raise ValueError('Solo puede generar reportes de sus propias ventas.')
+            if tipo not in TIPOS_PERSONALES:
+                raise ValueError('Solo puede generar reportes de sus propias ventas y encuestas.')
             if vendedor is not None and vendedor != actual['idUsuario']:
-                raise ValueError('Solo puede generar reportes de sus propias ventas.')
+                raise ValueError('Solo puede generar reportes de sus propias ventas y encuestas.')
             vendedor = actual['idUsuario']
         if tipo in ('Ventas','Ventas por usuario'):
             filtro='v.fecha >= %s AND v.fecha < DATE_ADD(%s,INTERVAL 1 DAY)'
@@ -43,9 +45,27 @@ def generar_reporte(usuario,tipo,desde,hasta,vendedor=None):
                 columnas=['ID usuario','Vendedor','Número de ventas','Total vendido','Venta promedio']
                 sql='''SELECT u.idUsuario,u.nombre,COUNT(v.idVenta),SUM(v.total),AVG(v.total)
                     FROM ventas v JOIN usuarios u ON u.idUsuario=v.idUsuario WHERE '''+filtro+' GROUP BY u.idUsuario,u.nombre ORDER BY u.nombre'
+        elif tipo == 'Encuestas':
+            columnas = ['Folio de encuesta', 'Fecha', 'Folio de venta', 'Calificación', 'Satisfacción', 'Comentario', 'Capturó']
+            sql = '''SELECT e.idEncuesta, e.fecha, e.idVenta, e.calificacion, e.comentario,
+                            COALESCE(u.nombre, 'Registro anterior') AS capturo
+                     FROM encuestas e
+                     LEFT JOIN encuesta_autor a ON a.idEncuesta=e.idEncuesta
+                     LEFT JOIN usuarios u ON u.idUsuario=a.idUsuario
+                     WHERE e.fecha >= %s AND e.fecha < DATE_ADD(%s, INTERVAL 1 DAY)'''
+            params = [desde, hasta]
+            if vendedor is not None:
+                sql += ' AND a.idUsuario=%s'
+                params.append(vendedor)
+            cur.execute(sql + ' ORDER BY e.fecha, e.idEncuesta', params)
+            filas = [[folio_encuesta(r['idEncuesta'], r['fecha']), r['fecha'],
+                      r['idVenta'] if r['idVenta'] is not None else 'Sin venta',
+                      r['calificacion'], CALIFICACIONES[r['calificacion'] - 1],
+                      r['comentario'] or '', r['capturo']] for r in cur.fetchall()]
+            return columnas, filas
         elif tipo=='Inventario':
-            columnas=['ID','Medicamento','Lote','Caducidad','Existencia total','Mínimo','Precio venta','Valor a costo','Estado']
-            sql='''SELECT m.idMedicamento,m.nombre,m.lote,m.fechaCaducidad,m.cantidad,m.stockMinimo,m.precioVenta,
+            columnas=['ID','Medicamento','Proveedor','Lote','Caducidad','Existencia total','Mínimo','Precio venta','Valor a costo','Estado']
+            sql='''SELECT m.idMedicamento,m.nombre,m.proveedor,m.lote,m.fechaCaducidad,m.cantidad,m.stockMinimo,m.precioVenta,
                 m.cantidad*m.precioCompra,IF(m.activo=1,'Activo','Inactivo') FROM medicamentos m
                 ORDER BY m.nombre'''; params=[]
         else:
@@ -77,7 +97,7 @@ class Reportes(Listado):
         super().__init__(usuario,'Reportes',['Resultado'],'Seleccione un reporte y consulte o exporte sus resultados.')
         self.busqueda.hide()
         self.tipo=QComboBox()
-        self.tipo.addItems(TIPOS if usuario.get('rol') == 'ADMIN' else ['Ventas', 'Ventas por usuario'])
+        self.tipo.addItems(TIPOS if usuario.get('rol') == 'ADMIN' else TIPOS_PERSONALES)
         self.desde=QDateEdit(QDate.currentDate().addMonths(-1)); self.hasta=QDateEdit(QDate.currentDate())
         self.vendedor=QComboBox()
         if usuario.get('rol') == 'ADMIN':

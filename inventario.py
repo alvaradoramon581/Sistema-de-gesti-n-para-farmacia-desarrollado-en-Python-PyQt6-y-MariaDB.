@@ -244,6 +244,11 @@ class Inventario(QWidget):
         layout_movimiento.addWidget(self.spn_cantidad, 2, 3)
         layout_movimiento.addWidget(QLabel("Descripción"), 3, 0)
         layout_movimiento.addWidget(self.txt_descripcion, 3, 1, 1, 3)
+        self.txt_proveedor = QLineEdit()
+        self.txt_proveedor.setMaxLength(150)
+        self.txt_proveedor.setPlaceholderText("Nombre del proveedor del medicamento")
+        layout_movimiento.addWidget(QLabel("Proveedor"), 4, 0)
+        layout_movimiento.addWidget(self.txt_proveedor, 4, 1, 1, 3)
         layout_movimiento.setColumnStretch(1, 2)
         layout_movimiento.setColumnStretch(3, 1)
 
@@ -297,7 +302,8 @@ class Inventario(QWidget):
             "Código",
             "Principio activo",
             "Fabricante",
-            "Ubicación"
+            "Ubicación",
+            "Proveedor"
         ])
 
 
@@ -318,7 +324,7 @@ class Inventario(QWidget):
         self.tabla.setMinimumHeight(140)
         layout_principal.addWidget(self.tabla, 1)
         layout_botones.addStretch()
-        layout_movimiento.addLayout(layout_botones, 4, 1, 1, 3)
+        layout_movimiento.addLayout(layout_botones, 5, 1, 1, 3)
         self.panel_movimiento = frame_movimiento
         self.panel_movimiento.setVisible(self.usuario.get('rol') == 'ADMIN')
         self.panel_movimiento.setEnabled(self.usuario.get('rol') == 'ADMIN')
@@ -383,6 +389,7 @@ class Inventario(QWidget):
                     m.codigoBarras,
                     m.principioActivo,
                     m.fabricante,
+                    m.proveedor,
                     u.codigo AS ubicacion
 
                 FROM medicamentos m
@@ -479,7 +486,8 @@ class Inventario(QWidget):
                     registro["codigoBarras"],
                     registro["principioActivo"],
                     registro["fabricante"],
-                    registro["ubicacion"]
+                    registro["ubicacion"],
+                    registro["proveedor"]
                 ]
 
 
@@ -552,6 +560,7 @@ class Inventario(QWidget):
                 Qt.ItemDataRole.UserRole + 1
             )
         )
+        self.txt_proveedor.setText(self.tabla.item(fila, 8).text())
 
 
         if self.cantidad_actual is None:
@@ -584,6 +593,7 @@ class Inventario(QWidget):
     def cambiar_tipo_movimiento(self):
 
         self.actualizar_limites_cantidad()
+        self.txt_proveedor.setReadOnly(self.cmb_tipo.currentData() != 'ENTRADA')
 
 
     # =========================================================
@@ -683,7 +693,8 @@ class Inventario(QWidget):
         try:
             nueva = movimiento_manual(self.usuario, self.id_medicamento_seleccionado,
                 self.cmb_tipo.currentData(), self.spn_cantidad.value(),
-                self.txt_descripcion.toPlainText().strip(), self.cantidad_actual)
+                self.txt_descripcion.toPlainText().strip(), self.cantidad_actual,
+                proveedor=self.txt_proveedor.text() if self.cmb_tipo.currentData() == 'ENTRADA' else None)
         except ValueError as exc:
             QMessageBox.warning(self, "No se pudo registrar", str(exc))
             return
@@ -724,6 +735,7 @@ class Inventario(QWidget):
 
 
         self.txt_descripcion.clear()
+        self.txt_proveedor.clear()
 
 
         self.btn_registrar.setEnabled(

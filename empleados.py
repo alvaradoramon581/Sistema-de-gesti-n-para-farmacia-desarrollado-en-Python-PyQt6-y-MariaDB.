@@ -1,7 +1,8 @@
 """Lista de empleados y operaciones exclusivamente en ventanas modales."""
+from pathlib import Path
 from PyQt6.QtCore import QDate, QTimer
 from PyQt6.QtWidgets import (QWidget, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLineEdit, QComboBox, QLabel, QDateEdit, QScrollArea)
+    QLineEdit, QComboBox, QLabel, QDateEdit, QScrollArea, QFileDialog)
 from estilos import ESTILO_GENERAL, ESTILO_BOTON_PELIGRO
 import servicios
 from ui_comun import (titulo, boton, tabla, llenar_tabla, confirmar, manejar_errores,
@@ -15,6 +16,7 @@ class DialogoEmpleado(QDialog):
             servicios.autorizar(cur, usuario, administrador=True)
         self.usuario = usuario
         self.empleado = empleado or {}
+        self.documento = None
         self.setWindowTitle('Consultar empleado' if consulta else ('Modificar empleado' if empleado else 'Registrar empleado'))
         self.setStyleSheet(ESTILO_GENERAL)
         dimensionar_dialogo(self, 660, 680)
@@ -31,12 +33,23 @@ class DialogoEmpleado(QDialog):
         self.campos = {}
         for clave, etiqueta, longitud in [('nombre','Nombre completo *',100),
                 ('rfc','RFC *',13), ('direccion','Dirección *',200),
-                ('telefono','Teléfono *',20), ('identificacion','Identificación (folio) *',100)]:
+                ('telefono','Teléfono *',20), ('identificacion','Identificación (folio)',100)]:
             campo = QLineEdit(str(self.empleado.get(clave) or ''))
             campo.setMaxLength(longitud)
             campo.setReadOnly(consulta)
             self.campos[clave] = campo
             form.addRow(etiqueta, campo)
+        archivo = QHBoxLayout()
+        self.nombre_documento = QLabel(self.empleado.get('documentoNombre') or 'Sin archivo adjunto')
+        self.nombre_documento.setWordWrap(True)
+        archivo.addWidget(self.nombre_documento, 1)
+        if not consulta:
+            self.btn_adjuntar = boton('Adjuntar PDF o imagen', self.adjuntar_documento, True)
+            archivo.addWidget(self.btn_adjuntar)
+        self.btn_descargar = boton('Guardar archivo…', self.descargar_documento, True)
+        self.btn_descargar.setEnabled(bool(self.empleado.get('documentoNombre')))
+        archivo.addWidget(self.btn_descargar)
+        form.addRow('INE o pasaporte', archivo)
         self.fecha = QDateEdit()
         self.fecha.setCalendarPopup(True)
         self.fecha.setDisplayFormat('dd/MM/yyyy')
@@ -90,8 +103,40 @@ class DialogoEmpleado(QDialog):
             raise ValueError('Las contraseñas no coinciden.')
         cuenta = {'usuario': self.nombre_usuario.text().strip(), 'rol': self.rol.currentText(),
                   'contrasena': self.clave.text()}
-        servicios.guardar_empleado(self.usuario, datos, cuenta, self.empleado.get('idEmpleado'))
+        servicios.guardar_empleado(self.usuario, datos, cuenta, self.empleado.get('idEmpleado'),
+                                   documento=self.documento)
         self.accept()
+
+    @manejar_errores
+    def adjuntar_documento(self):
+        ruta, _ = QFileDialog.getOpenFileName(
+            self, 'Adjuntar INE o pasaporte', '',
+            'PDF o imágenes (*.pdf *.png *.jpg *.jpeg *.bmp *.gif *.webp *.tif *.tiff)')
+        if not ruta:
+            return
+        try:
+            documento = {'nombre': Path(ruta).name, 'contenido': Path(ruta).read_bytes()}
+        except OSError as exc:
+            raise ValueError('No se pudo leer el archivo seleccionado.') from exc
+        servicios.validar_documento_identidad(documento)
+        self.documento = documento
+        self.nombre_documento.setText(documento['nombre'])
+        self.btn_descargar.setEnabled(True)
+
+    @manejar_errores
+    def descargar_documento(self):
+        if self.documento is not None:
+            with servicios.transaccion() as cur:
+                servicios.autorizar(cur, self.usuario, administrador=True)
+            documento = self.documento
+        else:
+            documento = servicios.consultar_documento_empleado(self.usuario, self.empleado['idEmpleado'])
+        ruta, _ = QFileDialog.getSaveFileName(self, 'Guardar identificación', documento['nombre'])
+        if ruta:
+            try:
+                Path(ruta).write_bytes(documento['contenido'])
+            except OSError as exc:
+                raise ValueError('No se pudo guardar el archivo en la ubicación seleccionada.') from exc
 
 
 class Empleados(QWidget):
